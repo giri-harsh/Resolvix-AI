@@ -40,6 +40,8 @@ class OpsClient:
         self.retry_queue: list[dict[str, Any]] = []
         self._flush_task: asyncio.Task | None = None
         self._closed = False
+        self._shared: httpx.AsyncClient | None = None          # one pooled client for every ops call (see _get_client)
+        self._shared_loop: asyncio.AbstractEventLoop | None = None
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -50,7 +52,15 @@ class OpsClient:
     async def _get_client(self) -> httpx.AsyncClient:
         if self._external_client is not None and not self._external_client.is_closed:
             return self._external_client
-        return httpx.AsyncClient(timeout=2.0)
+        # One pooled client for the life of the runtime. It used to be a NEW AsyncClient per request, which builds an SSL context every
+        # time (about 0.35 to 0.4 s on the demo machine, even for http://), never closed, and sat in front of every ops write
+        # (create_ticket blocks the emergency transfer). A client is bound to the event loop it was first used on, so a different
+        # loop (tests, reloads) gets a fresh one.
+        loop = asyncio.get_running_loop()
+        if self._shared is None or self._shared.is_closed or self._shared_loop is not loop:
+            self._shared = httpx.AsyncClient(timeout=2.0, limits=httpx.Limits(max_connections=20, max_keepalive_connections=10))
+            self._shared_loop = loop
+        return self._shared
 
     async def start(self) -> None:
         """Start the background retry-queue flusher."""
@@ -67,6 +77,8 @@ class OpsClient:
                 pass
         if self._external_client is not None and not self._external_client.is_closed:
             await self._external_client.aclose()
+        if self._shared is not None and not self._shared.is_closed and self._shared_loop is asyncio.get_running_loop():
+            await self._shared.aclose()
 
     async def _periodic_flush(self) -> None:
         while not self._closed:

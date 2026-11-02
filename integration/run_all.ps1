@@ -19,17 +19,16 @@ $Run = Join-Path $PSScriptRoot ".run"
 $EnvFile = Join-Path $PSScriptRoot ".env"
 New-Item -ItemType Directory -Force -Path $Run | Out-Null
 
-function New-Secret([int]$n = 32) { -join ((48..57) + (65..90) + (97..122) | Get-Random -Count $n | ForEach-Object { [char]$_ }) }
+. (Join-Path $PSScriptRoot "keygen.ps1")     # New-RandomKey / New-RandomString / Initialize-ShimApiKey (cryptographic RNG, never printed)
 
 # ---- shared environment ------------------------------------------------------------------------------------------
 if (-not (Test-Path $EnvFile)) {
-    $k = New-Secret 32
-    @(
+    [IO.File]::WriteAllLines($EnvFile, @(
         "# LOCAL ONLY, git-ignored. One SERVICE_KEY is used by ops, the runtime and (as KB_EXPORT_SERVICE_KEY) the brain.",
-        "SERVICE_KEY=$k", "SHIM_API_KEY=$(New-Secret 24)", "SESSION_SECRET=$(New-Secret 48)", "SEED_PASSWORD=$(New-Secret 14)",
+        "SERVICE_KEY=$(New-RandomKey 32)", "SESSION_SECRET=$(New-RandomKey 48)", "SEED_PASSWORD=$(New-RandomString 16)",
         "GROQ_API_KEY="
-    ) | Set-Content -Encoding utf8 $EnvFile
-    Write-Host "Created integration/.env with random local-only secrets (not printed)."
+    ), (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "Created integration/.env with random local-only secrets (not printed). SHIM_API_KEY is added below."
 }
 Get-Content $EnvFile | ForEach-Object {
     $l = $_.Trim()
@@ -38,7 +37,7 @@ Get-Content $EnvFile | ForEach-Object {
         if ($val) { Set-Item -Path "env:$name" -Value $val }
     }
 }
-foreach ($need in "SERVICE_KEY", "SESSION_SECRET", "SEED_PASSWORD", "SHIM_API_KEY") {
+foreach ($need in "SERVICE_KEY", "SESSION_SECRET", "SEED_PASSWORD") {
     if (-not (Get-Item "env:$need" -ErrorAction SilentlyContinue)) { throw "$need is missing in integration/.env" }
 }
 $env:PYTHONUTF8 = "1"
@@ -50,7 +49,16 @@ if (-not $env:RUNTIME_MODE) { $env:RUNTIME_MODE = "mock" }       # set live in i
 $env:RUNTIME_URL = "http://localhost:8000"
 $env:DATABASE_URL = "sqlite:///./data/resolvix.db"
 # runtime + brain (the Brain runs inside the runtime process)
-$env:OPS_API_URL = "http://localhost:8100"; $env:PUBLIC_BASE_URL = "http://localhost:8000"; $env:TELEPHONY_MODE = "mock"
+$env:OPS_API_URL = "http://localhost:8100"; $env:TELEPHONY_MODE = "mock"
+# PUBLIC_BASE_URL = the URL Agora's cloud uses to reach POST /v1/chat/completions. Default: local. To use a tunnel, set it in the shell
+# or in integration/.env (never hard-code a tunnel URL here). A non-local value must be a bare https origin.
+if (-not $env:PUBLIC_BASE_URL) { $env:PUBLIC_BASE_URL = "http://localhost:8000" }
+elseif ($env:PUBLIC_BASE_URL -notmatch '^https://[A-Za-z0-9.-]+(:\d+)?/?$' -and $env:PUBLIC_BASE_URL -notmatch '^http://(localhost|127\.0\.0\.1)(:\d+)?/?$') {
+    throw "PUBLIC_BASE_URL must be a bare https origin (the tunnel URL) or a localhost URL. The value is not printed."
+}
+# SHIM_API_KEY: keep an explicitly supplied one (shell or integration/.env); otherwise generate 32 random bytes and persist them to integration/.env.
+# The runtime reads it from this environment and uses the same value in the Agora agent's llm.api_key, so there is a single source of truth.
+[void](Initialize-ShimApiKey -EnvFile $EnvFile -PublicBaseUrl $env:PUBLIC_BASE_URL)
 $env:BRAIN_IMPL = "real"
 $env:LLM_MODE = $LlmMode
 $env:KB_SOURCE = "url:http://localhost:8100/v1/kb/export"

@@ -48,3 +48,14 @@ The runtime reads only the process environment (no `.env` loading), so `run_all.
 ## Not covered here
 Real voice (microphone and speaker), Agora, ASR/TTS vendors and phone telephony need credentials and a public HTTPS URL that this
 machine does not have: see `INTEGRATION_REPORT.md`, "Walls".
+
+## Public voice test: allow-list proxy (local only until you decide to open a tunnel)
+`voice_proxy.py` listens on 127.0.0.1:8800 and forwards **only** `POST /v1/chat/completions` (optionally `?call_id=<id>`) to the runtime on 127.0.0.1:8000;
+everything else is 404/405 and never reaches the runtime. The runtime still checks `SHIM_API_KEY` itself. Start/stop (no tunnel is started by these):
+```powershell
+integration\start_voice_proxy.ps1 -Python .\.venv\Scripts\python.exe     # 127.0.0.1:8800 only; pid recorded for stop_all.ps1
+python -m pytest integration/tests -q                                       # proxy tests (fake upstream, real sockets)
+```
+Later, a tunnel must point at **8800**, never at 8000/8100/5173. The tunnel URL goes into `PUBLIC_BASE_URL`: set it in the shell
+(`$env:PUBLIC_BASE_URL = "https://<host>"`) or on a line in `integration/.env`, then start the stack with `run_all.ps1`. Without it the default stays `http://localhost:8000`.
+`run_all.ps1` accepts only a bare https origin or a localhost URL for this variable and never prints it.

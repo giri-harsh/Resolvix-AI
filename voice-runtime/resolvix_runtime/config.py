@@ -40,6 +40,12 @@ class RuntimeSettings:
     tts_model: str = "eleven_flash_v2_5"
     tts_voice_id: str = "pNInz6obpgDQGcFmaJgB"
     tts_credential_mode: str = "byok"  # "byok" or "managed"
+    voice_web_cors_origins: str = "http://localhost:5174,http://127.0.0.1:5174"   # comma separated; add the tunnel origin here
+    voice_web_api_key: str = ""            # optional bearer token for /api/voice (set it whenever the API is reachable from the internet)
+    voice_web_idle_timeout_s: float = 120.0
+    voice_web_max_text_chars: int = 600
+    voice_web_max_calls: int = 20
+    voice_web_allow_caller_number: bool = True   # lets the page set a test caller number (repeat-caller memory, SMS demo)
     runtime_lines: dict[str, dict[str, str]] = field(default_factory=load_default_runtime_lines)
 
     def __post_init__(self) -> None:
@@ -76,6 +82,12 @@ class RuntimeSettings:
             tts_model=os.getenv("TTS_MODEL", "eleven_flash_v2_5"),
             tts_voice_id=os.getenv("TTS_VOICE_ID", "pNInz6obpgDQGcFmaJgB"),
             tts_credential_mode=os.getenv("TTS_CREDENTIAL_MODE", "byok").lower(),
+            voice_web_cors_origins=os.getenv("VOICE_WEB_CORS_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174"),
+            voice_web_api_key=os.getenv("VOICE_WEB_API_KEY", ""),
+            voice_web_idle_timeout_s=float(os.getenv("VOICE_WEB_IDLE_TIMEOUT_S", "120")),
+            voice_web_max_text_chars=int(os.getenv("VOICE_WEB_MAX_TEXT_CHARS", "600")),
+            voice_web_max_calls=int(os.getenv("VOICE_WEB_MAX_CALLS", "20")),
+            voice_web_allow_caller_number=os.getenv("VOICE_WEB_ALLOW_CALLER_NUMBER", "true").lower() in ("true", "1", "yes"),
             runtime_lines=runtime_lines,
         )
 

@@ -26,6 +26,8 @@ class SessionState:
     agora_agent_id: str | None = None
     agora_channel: str | None = None
     background_tasks: set[asyncio.Task] = field(default_factory=set)
+    source: str = "runtime"      # "voice-web" for calls opened through /api/voice
+    finalized: bool = False      # the call has been ended and posted to ops (exactly once)
 
     def add_background_task(self, task: asyncio.Task) -> None:
         """Register a background task with a strong reference until completion."""
@@ -78,6 +80,9 @@ class SessionRegistry:
 
     def get(self, call_id: str) -> SessionState | None:
         return self._sessions.get(call_id)
+
+    def all(self) -> list[SessionState]:
+        return list(self._sessions.values())
 
     def register_task(self, call_id: str, task: asyncio.Task) -> None:
         """Register the active SSE streaming task. Cancels any currently active task for barge-in if interruptable."""

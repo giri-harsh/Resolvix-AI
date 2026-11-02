@@ -11,3 +11,9 @@
 | 2026-11-02 afternoon | Pre-work: full-system validation on a local stack | PASS except C-1 | `integration/INTEGRATION_REPORT.md`: 35/35 scenario checks (a-i), J6 via direct reload, duplicate/ops-down drills; Publish button blocked by C-1 (`FINDINGS_FOR_C.md`). Suites: ops 550/2 skipped, brain 505+10, runtime 16, A's e2e 9, smoke 43, journeys 30, dashboard 239. |
 
 Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) keys, and the tunnel. Meanwhile: C-1 retest when Harsh pushes, CR-7 option 2 / decision 27 (already in `brain/**`, see tests), DEMO_SCRIPT.md.
+
+## Voice-web API (Plan B) — step 1 done
+- `integration/VOICE_WEB_API.md` is the contract; implemented in `voice-runtime/resolvix_runtime/voice_api.py` (mounted at `/api/voice`): start call, SSE turn stream (+ `?stream=false` JSON), cancel (CR-8 aware), end (posts `/v1/calls/{id}/end` to ops), config, server idle sweeper, optional bearer key, CORS from `VOICE_WEB_CORS_ORIGINS`.
+- voice-web R-1 (CORS), R-2 (`/api/test/end` ends the call in ops), R-4 (`ticket_id` in turn response) handled on the legacy `/api/test/*` too. R-3 = streaming in `/api/voice`. R-5 waits for the tunnel.
+- Tests: `voice-runtime/tests/test_voice_web_api.py` (12). Runtime suite 44 passed.
+- Also fixed: OpsClient created a new HTTP client (SSL context, ~0.4 s) for every ops call; now one pooled client.

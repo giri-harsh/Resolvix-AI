@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, TypeAdapter
@@ -37,6 +38,7 @@ from .ops_client import OpsClient
 from .sessions import SessionState, get_session_registry
 from .shim import init_shim_router
 from .telephony import get_telephony_adapter
+from .voice_api import VoiceWebApi
 
 logger = logging.getLogger("resolvix_runtime")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -58,6 +60,7 @@ class TestTurnResponse(BaseModel):
     call_id: str
     events: list[dict[str, Any]]
     spoken_text: str
+    ticket_id: str | None = None   # set when a ticket was created in this turn (voice-web R-4)
 
 
 def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
@@ -66,10 +69,12 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
 
     ops_client = OpsClient(settings)
     agora_controller = AgoraController(settings, ops_client)
+    voice_web = VoiceWebApi(settings, ops_client)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await ops_client.start()
+        await voice_web.start()
         brain = get_brain(settings)
         if hasattr(brain, "ready"):
             try:
@@ -78,6 +83,7 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
                 logger.error("Brain ready() error: %s", e)
         logger.info("Resolvix voice-runtime started on port %s", settings.port)
         yield
+        await voice_web.stop()
         if hasattr(brain, "aclose"):
             try:
                 await brain.aclose()
@@ -95,6 +101,13 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
     # 1. Mount OpenAI-compatible chat completions router
     shim_router = init_shim_router(settings, ops_client)
     app.include_router(shim_router)
+
+    # CORS for the page served from another origin (voice-web): /api/test/*, /healthz and /api/voice share one allow-list
+    app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.voice_web_cors_origins.split(",") if o.strip()],
+                       allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "Accept"], max_age=600)
+
+    # 1b. Browser voice chat API (voice-web, "Plan B"); contract in integration/VOICE_WEB_API.md
+    app.mount("/api/voice", voice_web.build_app())
 
     # 2. Health check endpoint
     @app.get("/healthz")
@@ -218,6 +231,7 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
             call_id=call_id,
             events=substituted_events,
             spoken_text=" ".join(spoken_pieces).strip(),
+            ticket_id=executor.ticket_id,
         )
 
     @app.post("/api/test/end")
@@ -225,21 +239,25 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
         call_id = payload.call_id
         registry = get_session_registry()
         session = registry.get(call_id)
-        if session:
-            session.is_ended = True
-            await session.drain_background_tasks()
-            brain = get_brain(settings)
-            await brain.end_call(call_id)
-            await ops_client.post_call_end(
-                call_id,
-                CallEnd(
-                    ended_at=datetime.now(timezone.utc),
-                    outcome=session.derive_outcome(),
-                    ai_resolved=len(session.created_tickets) == 0,
-                    turns_count=session.turn_count,
-                ),
-            )
-        return {"status": "ended", "call_id": call_id}
+        if session is None:
+            err = ErrorEnvelope(error=ErrorBody(code="not_found", message="Unknown or already ended call.", retryable=False))
+            return JSONResponse(status_code=404, content=err.model_dump(mode="json"))
+        session.is_ended = True
+        await session.drain_background_tasks()
+        brain = get_brain(settings)
+        await brain.end_call(call_id)
+        outcome = CallOutcome.abandoned if session.turn_count == 0 else session.derive_outcome()
+        await ops_client.post_call_end(
+            call_id,
+            CallEnd(
+                ended_at=datetime.now(timezone.utc),
+                outcome=outcome,
+                ai_resolved=outcome == CallOutcome.answered,
+                turns_count=session.turn_count,
+            ),
+        )
+        registry.remove(call_id)
+        return {"ok": True, "status": "ended", "call_id": call_id, "outcome": outcome.value}
 
     # 5. KB reload passthrough (FR-A1 / 4.6)
     @app.post("/admin/kb/reload")

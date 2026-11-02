@@ -585,6 +585,8 @@ async def test_emergency_sms_typed_endpoint_does_not_block_response():
         sms_completed = False
 
         async with respx.mock(base_url="http://localhost:8100", assert_all_called=False) as mock:
+            # call start was not mocked here: respx raised, the ops client retried, and the ticket POST queued behind that (about 1 s)
+            mock.post("/v1/calls").mock(return_value=respx.MockResponse(201, json={"status": "created"}))
             mock.post("/v1/tickets").mock(
                 return_value=respx.MockResponse(201, json={"ticket_id": "EM-2002", "created": True})
             )
@@ -608,6 +610,10 @@ async def test_emergency_sms_typed_endpoint_does_not_block_response():
 
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                # warm-up on another call: the first request pays one-off start-up costs (imports, client creation) that depend on the machine
+                await ac.post("/api/test/turn", json={"call_id": "call-typed-emerg-warmup", "text": "help"})
+                await asyncio.sleep(0.5)                                  # let the warm-up call's delayed SMS finish
+                sms_completed = False
                 start_t = time.perf_counter()
                 resp = await ac.post("/api/test/turn", json={"call_id": "call-typed-emerg-1", "text": "help"})
                 elapsed = time.perf_counter() - start_t
