@@ -19,3 +19,5 @@ Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) ke
 - Also fixed: OpsClient created a new HTTP client (SSL context, ~0.4 s) for every ops call; now one pooled client.
 
 - voice-web served by the runtime at /voice/ (same origin, no CORS). R-2 (/api/test/end) was already done in 13a8bee. Tunnel (R-5) waits for approval; /api/voice and /voice must be added to the allow-list proxy first.
+
+- Stack restarted from this worktree (SHIM_API_KEY rotated to a 43-char random key). Proxy is in voice-web mode (VOICE_PROXY_VOICE_WEB=1): only the /voice/ page, /api/voice/*, /api/test/{turn,end} and /healthz are forwarded; caller_number is stripped; 120 req/min. Quick cloudflared tunnel points at 127.0.0.1:8800 only (pid recorded, stop_all stops it). Checked through the public URL: page 200, call/turn/end work (turn 0.6 s, ops end posted), /api/sessions/web, /admin/kb/reload, /v1/calls, /docs and /voice/README.md all 404.
