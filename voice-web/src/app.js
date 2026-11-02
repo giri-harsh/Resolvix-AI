@@ -14,7 +14,7 @@ const store = {
 };
 
 const params = new URLSearchParams(location.search);
-$("runtimeUrl").value = params.get("runtime") || store.get("runtimeUrl", location.port === "8200" ? location.origin : "http://localhost:8000");
+$("runtimeUrl").value = params.get("runtime") || store.get("runtimeUrl", location.port === "8200" || location.pathname.startsWith("/voice") ? location.origin : "http://localhost:8000");
 $("lang").value = store.get("lang", "hi-IN");
 $("hinglishVoice").value = store.get("hinglishVoice", "hi");
 for (const id of ["runtimeUrl", "lang", "hinglishVoice"]) $(id).addEventListener("change", () => { store.set(id, $(id).value); if (id === "runtimeUrl") pollHealth(); });

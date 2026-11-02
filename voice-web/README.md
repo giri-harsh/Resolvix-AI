@@ -19,6 +19,9 @@ You can also type in the box: it takes the same path as speech.
 3. The runtime must allow cross-origin calls and should have an end-call endpoint: see **REQUESTS_FOR_KAMAL.md** (R-1, R-2).
    Until R-1 is done the status pill shows "runtime unreachable" for any other origin; the mock is unaffected.
 
+### Served by the runtime (no CORS needed)
+If Kamal serves the `voice-web/` files from the runtime under `/voice/` (note the trailing slash, the page uses relative paths), the page defaults to its own origin as the Runtime URL, so it also works through his tunnel without any setting.
+
 ## What it does
 - **Mic button + continuous mode.** Language selector hi-IN / en-IN. Interim words show under the buttons, final sentences are sent.
 - **Call lifecycle.** The call starts with the first sentence, ends on **End call**, after **60 s** without speech, or when the brain says `end_call`.
