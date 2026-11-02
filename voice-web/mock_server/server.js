@@ -1,6 +1,7 @@
 // Mock of the voice-runtime typed-turn API, so the page can be tested with no runtime, brain or keys.
 //   node mock_server/server.js [port]      (default 8200; also serves the page at http://localhost:8200/)
-// Same request/response shapes as voice-runtime: GET /healthz, POST /api/test/turn, plus the proposed POST /api/test/end.
+// Same request/response shapes as voice-runtime: GET /healthz, POST /api/test/turn, POST /api/test/end, and the streaming
+// API of integration/VOICE_WEB_API.md: /api/voice/config, /calls, /calls/{id}/turns (SSE, one speech event per sentence), /cancel, /end.
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -76,7 +77,40 @@ export function mockReply(text, state) {
   return { events, spoken_text: events.filter((e) => e.type === "speech").map((e) => e.text).join(" ") };
 }
 
-export function createServer({ latencyMs = 250 } = {}) {
+const DIGITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+/** "EX-1042" -> "E X one zero four two": how the runtime writes ticket ids in streamed speech. */
+export const spellForSpeech = (text) => String(text).replace(/\b([A-Z])([A-Z])-(\d{4})\b/g, (_m, a, b, d) => `${a} ${b} ${[...d].map((c) => DIGITS[Number(c)]).join(" ")}`);
+
+/** Streaming-contract events for one turn: meta, speech {index,text}, action {kind,...}, done. Built from the canned reply. */
+export function streamEvents(text, state, turnIndex) {
+  const { events } = mockReply(text, state);
+  const meta = events.find((e) => e.type === "meta");
+  const done = events.find((e) => e.type === "done").summary;
+  const speeches = events.filter((e) => e.type === "speech").map((e) => e.text);
+  const ticketId = speeches.join(" ").match(/\b[A-Z]{2}-\d{4}\b/)?.[0] ?? null;
+  const out = [{ event: "meta", data: { turn_index: turnIndex, path: meta.path, tier: meta.tier, lang: meta.lang, interruptable: meta.interruptable } }];
+  let index = 0;
+  for (const e of events) {
+    if (e.type === "speech") out.push({ event: "speech", data: { index: index++, text: spellForSpeech(e.text) } });
+    else if (e.type === "action") {
+      const a = e.action;
+      if (a.type === "create_ticket") out.push({ event: "action", data: { kind: "create_ticket", ticket_id: ticketId, type: a.ticket?.type, priority: a.ticket?.priority, department: a.ticket?.department ?? null } });
+      else if (a.type === "transfer") out.push({ event: "action", data: { kind: "transfer", department: a.department, simulated: true } });
+      else out.push({ event: "action", data: { kind: a.type } });
+    }
+  }
+  out.push({ event: "done", data: { turn_index: turnIndex, path: done.path, tier: done.tier, lang: done.lang, rule_id: done.rule_id ?? null, priority: done.priority === "P4" ? null : done.priority, ticket_ids: ticketId ? [ticketId] : [], ended: false, latency_ms: 0 } });
+  return out;
+}
+
+const sse = (e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`;
+
+/**
+ * latencyMs: time until the first sentence is ready; sentenceDelayMs: extra time per following sentence.
+ * The streaming API sends every sentence as soon as it is ready; the /api/test/turn answer waits for the whole turn.
+ * streaming:false makes /api/voice/* answer 404 (an older runtime), to test the page's fallback.
+ */
+export function createServer({ latencyMs = 250, sentenceDelayMs = Math.min(200, latencyMs), streaming = true, chunkSplit = false } = {}) {
   const calls = new Map(); // call_id -> { turns, ended }
   const state = { next: 1042 };
   const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST,OPTIONS" };
@@ -90,6 +124,66 @@ export function createServer({ latencyMs = 250 } = {}) {
     req.on("end", () => { try { resolve(JSON.parse(raw || "{}")); } catch { resolve({}); } });
   });
 
+  const envelope = (res, status, code, message, retryable = false) => json(res, status, { error: { code, message, retryable, details: {} } });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function voiceApi(req, res, url) {
+    const parts = url.pathname.replace(/^\/api\/voice\//, "").split("/").filter(Boolean); // config | calls | calls/{id}/{turns|cancel|end}
+    if (parts[0] === "config" && req.method === "GET") return json(res, 200, { api_version: 1, contract_version: "1.0.0", streaming: true, idle_timeout_s: 120, max_text_chars: 600, caller_number_allowed: true });
+    if (parts[0] !== "calls") return envelope(res, 404, "not_found", "Unknown route.");
+    if (parts.length === 1 && req.method === "POST") {
+      const id = `call-voice-${Math.random().toString(16).slice(2, 12)}`;
+      calls.set(id, { turns: 0, ended: false, running: null, voice: true });
+      return json(res, 201, { call_id: id, greeting_text: "Namaste! AKGEC helpline mein aapka swagat hai. Main aapki kya madad kar sakta hoon?", lang: "hinglish", kb_version: "mock", interruptable: false, idle_timeout_s: 120, max_text_chars: 600 });
+    }
+    const call = calls.get(parts[1]);
+    const action = parts[2];
+    if (!call || call.ended) return envelope(res, 404, "not_found", "Unknown or ended call.");
+    if (action === "end" && req.method === "POST") {
+      call.ended = true;
+      return json(res, 200, { status: "ended", call_id: parts[1], outcome: call.turns ? "answered" : "abandoned", ai_resolved: call.turns > 0, turns_count: call.turns });
+    }
+    if (action === "cancel" && req.method === "POST") {
+      const run = call.running;
+      if (!run) return json(res, 200, { call_id: parts[1], cancelled: false, reason: "no_turn_in_progress" });
+      if (!run.interruptable) return json(res, 200, { call_id: parts[1], cancelled: false, reason: "not_interruptable" });
+      run.cancelled = true;
+      return json(res, 200, { call_id: parts[1], cancelled: true });
+    }
+    if (action === "turns" && req.method === "POST") {
+      const body = await readBody(req);
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text || text.length > 600) return envelope(res, 422, "validation_error", "text must be 1..600 characters.");
+      if (call.running) {
+        if (!call.running.interruptable) return envelope(res, 409, "conflict", "The previous turn cannot be interrupted yet.", true);
+        call.running.cancelled = true;
+      }
+      call.turns += 1;
+      const run = { interruptable: true, cancelled: false };
+      call.running = run;
+      server.turnLog.push({ callId: parts[1], text });
+      const events = streamEvents(text, state, call.turns);
+      run.interruptable = events[0].data.interruptable !== false;
+      // the connection closing (the page aborted its fetch) cancels an interruptable turn
+      res.on("close", () => { if (!res.writableEnded && run.interruptable) run.cancelled = true; });
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", ...cors });
+      let spoken = 0;
+      for (const e of events) {
+        if (e.event === "speech") await sleep(spoken++ === 0 ? latencyMs : sentenceDelayMs);
+        if (run.cancelled) {
+          if (!res.writableEnded && !res.destroyed) { res.write(sse({ event: "error", data: { code: "conflict", message: "The turn was cancelled (barge-in).", retryable: false } })); res.end(); }
+          if (call.running === run) call.running = null;
+          server.cancelled += 1;
+          return;
+        }
+        if (chunkSplit) { const raw = sse(e); res.write(raw.slice(0, 7)); await sleep(1); res.write(raw.slice(7)); } else res.write(sse(e));
+      }
+      if (call.running === run) call.running = null;
+      return res.end();
+    }
+    return envelope(res, 404, "not_found", "Unknown route.");
+  }
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     if (req.method === "OPTIONS") { res.writeHead(204, cors); return res.end(); }
@@ -101,8 +195,10 @@ export function createServer({ latencyMs = 250 } = {}) {
       const call = calls.get(callId) ?? { turns: 0, ended: false };
       calls.set(callId, call);
       call.turns += 1;
-      await new Promise((r) => setTimeout(r, latencyMs));
-      return json(res, 200, { call_id: callId, ...mockReply(body.text, state) });
+      const reply = mockReply(body.text, state);
+      const nSpeech = reply.events.filter((e) => e.type === "speech").length;
+      await new Promise((r) => setTimeout(r, latencyMs + Math.max(0, nSpeech - 1) * sentenceDelayMs));
+      return json(res, 200, { call_id: callId, ticket_id: reply.spoken_text.match(/\b[A-Z]{2}-\d{4}\b/)?.[0] ?? null, ...reply });
     }
     if (url.pathname === "/api/test/end" && req.method === "POST") {
       const body = await readBody(req);
@@ -110,6 +206,10 @@ export function createServer({ latencyMs = 250 } = {}) {
       if (!call) return json(res, 404, { error: "unknown call" });
       call.ended = true;
       return json(res, 200, { ok: true, call_id: body.call_id, turns_count: call.turns, outcome: "answered" });
+    }
+    if (url.pathname.startsWith("/api/voice/")) {
+      if (!streaming) return json(res, 404, { detail: "Not Found" });
+      return voiceApi(req, res, url);
     }
     // static page
     const rel = url.pathname === "/" ? "/index.html" : url.pathname;
@@ -124,6 +224,8 @@ export function createServer({ latencyMs = 250 } = {}) {
     }
   });
   server.calls = calls;
+  server.turnLog = []; // every streamed turn text the mock received
+  server.cancelled = 0; // streamed turns that ended through a cancel / aborted connection
   return server;
 }
 

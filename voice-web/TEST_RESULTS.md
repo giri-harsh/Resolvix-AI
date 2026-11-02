@@ -1,6 +1,6 @@
 # Test results
 
-## 1. Unit tests: `node --test test/*.test.js` -> **33 passed, 0 failed** (Node 24; 5 added for the unbound-API bug: real globals, recognition error mapping)
+## 1. Unit tests: `node --test test/*.test.js` -> **53 passed, 0 failed** (Node 24). 28 original, 5 for the unbound-API bug (real globals, recognition errors), 20 for the streaming API: SSE parser (split chunks, CRLF, Hindi bytes), accumulator, stream vs mock under strict globals, abort/barge-in (interruptable and not), error envelopes, fallback decision and fallback runtime, sentence queue
 Sentence splitter (danda, decimals, abbreviations), ticket-id speller, ticket-id extraction, voice choice and Hinglish override, idle timer
 (fake clock: fires once, reset, pause/resume, stop), barge-in controller (cancels speech, aborts the request in flight, invalidates the old turn,
 stale answers ignored), turn client against the mock server (first turn starts a call, ids reused, abort -> `AbortError`, unreachable runtime and HTTP
@@ -25,6 +25,14 @@ errors, end call, health), mock reply shapes.
 
 **Not exercised here:** real microphone recognition (the built-in browser has no microphone), the 60 s idle end in real time (covered by the fake-clock unit test),
 Hindi voice quality (no hi-IN voice installed), continuous-mode restarts over a long session. These need a person with Chrome and a microphone.
+
+## 2b. Streaming API against the streaming mock (built-in Chromium, typed box)
+| Check | Result |
+|---|---|
+| auto mode starts `/api/voice/calls`, sentences spoken as they arrive, ticket id spelled by the runtime | PASS |
+| barge-in with a second typed message: stream aborted, third sentence never shown or spoken, "interrupted" logged, no console errors | PASS |
+| runtime without `/api/voice` (404): "streaming API unavailable ... using /api/test/*" in Raw events, reply works, call id `call-test-...` | PASS |
+| end-of-speech -> first reply text / first audio, same question, mock latency 250 ms + 200 ms per extra sentence (2-sentence reply) | streaming: 268 ms / 434 ms; /api/test: 474 ms / 732 ms. The very first utterance after page load adds about 300 ms (voice start-up): 284 / 745 ms |
 
 ## 3. Against Kamal's runtime
 **Not run yet.** It needs his URL (REQUESTS_FOR_KAMAL R-5) and CORS (R-1); the end-call endpoint (R-2) is needed for "Answered by AI" to increment.

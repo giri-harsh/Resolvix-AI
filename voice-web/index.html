@@ -16,6 +16,13 @@
       <label>Runtime URL
         <input id="runtimeUrl" type="text" spellcheck="false" placeholder="http://localhost:8000" />
       </label>
+      <label>API
+        <select id="apiMode">
+          <option value="auto">auto (streaming /api/voice, falls back to /api/test)</option>
+          <option value="stream">streaming only (/api/voice)</option>
+          <option value="legacy">fallback only (/api/test, whole turn)</option>
+        </select>
+      </label>
       <label>Speak in
         <select id="lang">
           <option value="hi-IN">Hindi / Hinglish (hi-IN)</option>
@@ -58,8 +65,9 @@
       </dl>
       <h2>Timings</h2>
       <dl>
-        <dt>End of speech → reply received</dt><dd id="tReply">-</dd>
-        <dt>End of speech → first audio</dt><dd id="tAudio">-</dd>
+        <dt>End of speech → first reply text</dt><dd id="tReply">-</dd>
+        <dt>End of speech → first audio, streaming</dt><dd id="tAudioStream">-</dd>
+        <dt>End of speech → first audio, /api/test</dt><dd id="tAudioLegacy">-</dd>
       </dl>
       <details><summary>Raw events</summary><pre id="diag"></pre><pre id="raw"></pre></details>
     </section>
