@@ -47,8 +47,9 @@ class ActionExecutor:
         self.ops_unreachable: bool = False
         self.injected_speech: list[str] = []
         self.last_sms_status: str | None = None
+        self.pending_tasks: list[asyncio.Task] = []
 
-    async def execute(self, action: Action, lang: str = "hinglish") -> None:
+    async def execute(self, action: Action, lang: str = "hinglish", blocking: bool = True) -> None:
         kind = action.kind
         if kind == "create_ticket":
             assert isinstance(action, CreateTicketAction)
@@ -59,7 +60,14 @@ class ActionExecutor:
             await self._handle_transfer(action, lang)
         elif kind == "send_sms":
             assert isinstance(action, SendSmsAction)
-            await self._handle_send_sms(action)
+            # In emergency path or when non-blocking, send SMS concurrently in background
+            # so the caller's emergency transfer or next actions are never delayed awaiting SMS delivery.
+            if not blocking or self.session.emergency:
+                task = asyncio.create_task(self._handle_send_sms(action))
+                self.session.add_background_task(task)
+                self.pending_tasks.append(task)
+            else:
+                await self._handle_send_sms(action)
         elif kind == "log_gap":
             assert isinstance(action, LogGapAction)
             await self._handle_log_gap(action)
@@ -191,34 +199,38 @@ class ActionExecutor:
             call_id=self.session.call_id,
             ticket_id=self.ticket_id,
         )
-        res = await self.ops_client.post_sms(sms_req)
-        if res is not None:
-            self.last_sms_status = res.status
-            if res.status in ("queued", "sent", "delivered"):
-                logger.info(
-                    "SMS %s for %s (id: %s, mode: %s)",
-                    res.status,
-                    action.to_number,
-                    res.message_id,
-                    res.mode,
-                )
-            elif res.status == "suppressed":
-                logger.info(
-                    "SMS suppressed for %s: %s (id: %s)",
-                    action.to_number,
-                    res.reason,
-                    res.message_id,
-                )
+        try:
+            res = await self.ops_client.post_sms(sms_req)
+            if res is not None:
+                self.last_sms_status = res.status
+                if res.status in ("queued", "sent", "delivered"):
+                    logger.info(
+                        "SMS %s for %s (id: %s, mode: %s)",
+                        res.status,
+                        action.to_number,
+                        res.message_id,
+                        res.mode,
+                    )
+                elif res.status == "suppressed":
+                    logger.info(
+                        "SMS suppressed for %s: %s (id: %s)",
+                        action.to_number,
+                        res.reason,
+                        res.message_id,
+                    )
+                else:
+                    logger.warning(
+                        "SMS failed for %s: %s (id: %s)",
+                        action.to_number,
+                        res.reason,
+                        res.message_id,
+                    )
             else:
-                logger.warning(
-                    "SMS failed for %s: %s (id: %s)",
-                    action.to_number,
-                    res.reason,
-                    res.message_id,
-                )
-        else:
+                self.last_sms_status = "failed"
+                logger.warning("ops.post_sms returned None (queued in retry queue)")
+        except Exception as e:
             self.last_sms_status = "failed"
-            logger.warning("ops.post_sms returned None (queued in retry queue)")
+            logger.warning("Background SMS task error for %s: %s", action.to_number, e)
 
     async def _handle_log_gap(self, action: LogGapAction) -> None:
         gap = GapCreate(
@@ -257,3 +269,9 @@ class ActionExecutor:
             text = text.replace("{{ticket_id}}", spoken_id)
 
         return text
+
+    async def wait_pending(self) -> None:
+        """Await all background tasks (such as asynchronous SMS) to complete cleanly."""
+        if self.pending_tasks:
+            await asyncio.gather(*self.pending_tasks, return_exceptions=True)
+            self.pending_tasks.clear()

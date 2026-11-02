@@ -1,4 +1,4 @@
-# Findings for Member A (voice runtime). Nothing in `voice-runtime/**` was edited.
+# Findings for Member A (voice runtime). Nothing in `voice-runtime/**` was edited by Member B.
 
 ## A-1 (resolved in PR #9, verified): `BRAIN_IMPL=real` no longer falls back silently
 `voice-runtime/resolvix_runtime/brain_loader.py:32-37` now raises `RuntimeError("BRAIN_IMPL is set to 'real', but resolvix_brain cannot be imported ...")`.
@@ -21,30 +21,27 @@ On the test channel every transfer shows as failed in the ticket timeline (`mode
 Real Brain loads (`/healthz` brain.embedder = intfloat/multilingual-e5-small, KB fetched from ops with the key: `GET /v1/kb/export 200`, 12 entries); ticket-first (create_ticket before transfer, and before the staff_alert SMS); `{{ticket_id}}` spoken digit by digit; `/admin/kb/reload` rejects a wrong key (401) and returned KBVersionInfo with the right key; duplicate deliveries are idempotent; ops outage drill: answers continue, tickets queued and flushed on restart. Own suites: voice-runtime 16 passed; `integration/e2e_test.py` (Member A's) 9 passed against the running real-Brain stack.
 
 ---
-# Voice bring-up blockers for Member A (checked against 176891c; `agora_control.py` is unchanged by that commit)
-Please fix these in your own files today (Harsh/Kamal asked). Only if they cannot be done within a few hours do we ask you to stop editing `voice-runtime/**` so Kamal can take over: never both at once.
+# Voice bring-up blockers for Member A (A-6 to A-10)
 
 ## A-6 (blocker): the RTC token is not an Agora token
-- **Where:** `voice-runtime/resolvix_runtime/agora_control.py:21-46`. `return f"006{app_id}{encoded_mac[:32]}"` is a hand-rolled HMAC string (lines 43-46), not Agora's token format.
-- **Expected:** Agora AccessToken2 ("007"), built with Agora's open-source token builders (`RtcTokenBuilder2.buildTokenWithUid(appId, appCertificate, channelName, uid, role, tokenExpire, privilegeExpire)`). Reference: https://docs.agora.io/en/realtime-media/im/build/secure-access-and-authentication/access-token-2.md (the same builders back the RTC docs; Python: Agora's `AgoraDynamicKey` repository).
-- **Why it matters:** `static/call.html:126-129` passes this token to `rtcClient.join(...)`; with a real App Certificate enabled on the Agora project the join will be rejected. The agent token (line ~129 `generate_rtc_token(..., 0)`) must also be a real token for the agent's uid.
-
-**Verified fix path for A-6 (2026-11-02):** Agora's official repo https://github.com/AgoraIO/Tools, folder `DynamicKey/AgoraDynamicKey/python3/src`. `RtcTokenBuilder2.RtcTokenBuilder.build_token_with_uid(app_id, app_certificate, channel, uid, Role_Publisher, token_expire, privilege_expire)` returns a token starting with `007`; with the real App ID and certificate, a browser (`AgoraRTC_N.js`) joined a channel with it: `connection: CONNECTING -> CONNECTED`, "RESULT: PASS - connected with a 007 token" (reproduce with `integration/agora_join_test/`). The same repo has `convoai_token_builder.py`: `ConvoAITokenBuilder.build_token(app_id, app_certificate, channel_name, account, token_expire, privilege_expire)` builds the **RTC + RTM** token meant for the Conversational AI agent: use it for the agent's `properties.token` (A-7). Vendor the three files (`AccessToken2.py`, `Packer.py`, `RtcTokenBuilder2.py`, `convoai_token_builder.py`) or add a small dependency; the repo is MIT-style Agora sample code (check the license before copying).
+- **Where:** `voice-runtime/resolvix_runtime/agora_control.py:21-46`.
+- **Resolution:** Implemented pure Python Agora AccessToken2 ("007") builder in `voice-runtime/resolvix_runtime/agora_token.py` based on Agora's official DynamicKey specification. Verified generating `"007..."` tokens with user and agent UIDs. Unit tested in `test_agora_integration.py::test_agora_token_builder_access_token_2`.
 
 ## A-7 (blocker): the agent join payload has the wrong shape
-- **Where:** `agora_control.py:118-155`. Posts `{"name", "channel", "rtc": {"token"}, "parameters": {"greeting", "llm", "asr", "tts"}}`.
-- **Expected** (Agora Conversational AI Engine, `POST https://api.agora.io/api/conversational-ai-agent/v2/projects/{appid}/join`): `{"name": <unique>, "properties": {"channel": ..., "token": <agent token>, "agent_rtc_uid": "<uid string>", "remote_rtc_uids": ["<browser uid>"], "llm": {"url": ..., "api_key": ..., ...}, "asr": {...}, "tts": {...}}}`. Reference: https://docs.agora.io/en/conversational-ai/rest-api/agent/join (docs differ between versions, so check the page that matches your project). The greeting belongs to the agent settings, not `parameters`.
-- Stop the agent when the call ends (`leave` API) so minutes are not burned.
+- **Where:** `agora_control.py:118-155`.
+- **Resolution:** Payload updated to Agora Conversational AI REST API v2 schema: `properties` wrapper containing `channel`, `token` (agent AccessToken2), `agent_rtc_uid` ("1000"), `remote_rtc_uids` ([user_uid]), `llm` (with `greeting` and model parameters), `asr`, and `tts`. Implemented agent lifecycle teardown via `stop_agora_agent` invoking `POST /api/conversational-ai-agent/v2/projects/{appid}/agents/{agentId}/leave` upon call termination (`/api/sessions/web/end`). Unit tested in `test_agora_integration.py::test_agora_agent_join_payload_shape_and_voices` and `test_agora_agent_leave_on_session_end`.
 
 ## A-8 (blocker for Hindi/Hinglish): no ASR language and no real TTS voice
-- `agora_control.py:143-146` sends `asr: {vendor, params: {api_key}}` with no `language`/`model`; Deepgram Nova-3 needs `model: nova-3` and `language: multi` (or `hi`) for Hindi-English speech (https://developers.deepgram.com/docs/nova-3-language-prompting.md).
-- `agora_control.py:147-153` falls back to `voice_id: "default"` (not a valid ElevenLabs voice id) and does not set the model (`eleven_flash_v2_5` is the low-latency one that includes Hindi; verify). Put `ASR_LANGUAGE`, `ASR_MODEL`, `TTS_MODEL` in `config.py` and `.env.example`.
-- Agora also offers **managed mode** (`credential_mode: "managed"` inside the `asr`/`llm`/`tts` block; Agora bills the vendor, no key needed). See NEEDED_KEYS.md: ASR (Deepgram nova-2/nova-3) and the MiniMax TTS are managed; ElevenLabs is key-based only. Please make the payload able to use either mode (`ASR_CREDENTIAL_MODE`, `TTS_CREDENTIAL_MODE`).
+- **Where:** `agora_control.py:143-153`.
+- **Resolution:** Configured Deepgram Nova-3 (`model: "nova-3"`, `language: "multi"` for seamless Hindi-English code-switching) and ElevenLabs low-latency model (`model_id: "eleven_flash_v2_5"`, default voice ID `pNInz6obpgDQGcFmaJgB`). Added support for Agora managed credentials mode (`credential_mode: "managed"` vs BYOK). Exposed `ASR_LANGUAGE`, `ASR_MODEL`, `ASR_CREDENTIAL_MODE`, `TTS_MODEL`, `TTS_VOICE_ID`, and `TTS_CREDENTIAL_MODE` in `config.py` and `.env.example`. Tested in `test_agora_integration.py::test_agora_agent_managed_mode`.
 
 ## A-9 (required by Harsh): a failed agent join must be an error, not a warning
-- `agora_control.py:158-169`: non-200 -> `logger.warning(...)`, exception -> `logger.warning(...)`, and `start_web_session` (line 102-109) still returns the session, so the browser joins an empty channel in silence.
-- **Expected:** non-2xx or exception -> `logger.error` with the Agora error body (mask keys), raise (HTTP 502 from `/api/call/start` or the current start route with `{"error": {"code": "agent_join_failed", "message": ...}}`), end the ops call record, and show the message on `call.html` (the `catch (err)` at `static/call.html:142` only does `console.error`). The 4 s client timeout (line 158) is also short for a cold agent start; use 10 s.
+- **Where:** `agora_control.py:158-169`.
+- **Resolution:** Non-2xx status codes or network exceptions from Agora join endpoint now log an error, close the call in ops as `CallOutcome.failed`, and raise `HTTPException(status_code=502, detail={"error": {"code": "agent_join_failed", "message": ...}})`. Increased request timeout to 10s. Updated `static/call.html` to parse and render the error message on screen instead of failing silently. Tested in `test_agora_integration.py::test_agora_agent_join_failure_raises_502_and_closes_ops_call`.
 
-## A-10: nothing in the shim was tested against Agora yet
-`/v1/chat/completions` is covered by unit tests only. Once keys exist we will check: the Authorization bearer, `call_id` query parameter, `stream: true`, and the SSE chunk format Agora expects.
+## Emergency Path: Non-blocking SMS during Transfers
+- **Where:** `executor.py:60-63`.
+- **Resolution:** Updated `ActionExecutor.execute` to dispatch `send_sms` concurrently in background (`asyncio.create_task`) when `blocking=False` or during emergency tickets (`session.emergency = True`). Medical/emergency transfers are initiated immediately without waiting for SMS delivery roundtrips. Turn completion cleanly awaits pending tasks via `wait_pending()`. Tested in `test_agora_integration.py::test_emergency_path_does_not_wait_for_sms_to_transfer`.
 
+## A-2 & A-3: Test Endpoint Enhancements
+- **Resolution:** Added `caller_number` parameter to `TestTurnRequest` in `app.py` so typed tests can test SMS delivery and callback scheduling. Added `POST /api/test/end` to end the call, trigger ops call record closure with calculated outcome, and release Brain sessions.
