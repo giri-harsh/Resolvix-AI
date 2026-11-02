@@ -75,3 +75,12 @@ This log records the integration gates, verification drills, and component miles
 3. **`Makefile`**: Target `run-ops` updated to run from `ops/api` (`cd ops/api && python -m uvicorn resolvix_ops.app:app --port 8100`).
 4. **Root `.env.example`**: Added `KB_EXPORT_SERVICE_KEY`, `KB_SOURCE`, `RUNTIME_MODE`, `OPS_PUBLIC_URL`, and `SEED_PASSWORD`.
 5. **E2E Verification**: Verified all 9 scenarios against seeded real ops-api and real brain with clean 100% pass rate.
+
+---
+
+## 5. Live Groq LLM & Real Brain Verification (100% Complete)
+- **Status:** Verified with real Groq LLM API (`LLM_MODE=live`), real Brain (`ResolvixBrain`), and real Ops API (`resolvix_ops`).
+- **Loud Failure Tested:** Verified via `pytest voice-runtime/tests/test_brain_loader.py` that missing dependencies or initialization errors under `BRAIN_IMPL=real` raise `RuntimeError` loudly with zero silent fallback.
+- **Live Conversational Traces:** Documented full request/response event streams and latency benchmarks in `voice-runtime/docs/LIVE_VERIFICATION.md`.
+- **All Tests:** 34 tests passing across contract, unit, and end-to-end suites.
+
