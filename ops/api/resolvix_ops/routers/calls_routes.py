@@ -1,10 +1,11 @@
 """Call-related routes."""
+import logging
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status as http_status
 from resolvix_contracts import CallEnd, CallStart, TurnSummary
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit
@@ -15,6 +16,7 @@ from ..privacy import mask_number
 from ..scope import scope_department
 from ..timeutil import iso_utc, now_utc, to_utc_naive
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["calls"])
 
 
@@ -22,8 +24,17 @@ def _not_found(call_id: str) -> HTTPException:
     return HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=f"Call {call_id} not found")
 
 
-def call_to_dict(call: Call, reveal: bool = False) -> dict:
-    """CallSummary / call detail shape. Numbers are masked unless reveal."""
+def count_turns(db: Session, call_ids: list[str]) -> dict[str, int]:
+    """Stored turns per call: COUNT(*), never turn_index arithmetic (the runtime and the brain count from 1, the
+    contract allows 0; a gap in the indexes must not change the count). One query for any number of calls."""
+    if not call_ids:
+        return {}
+    rows = db.query(Turn.call_id, func.count(Turn.id)).filter(Turn.call_id.in_(call_ids)).group_by(Turn.call_id).all()
+    return {cid: n for cid, n in rows}
+
+
+def call_to_dict(call: Call, turns: int, reveal: bool = False) -> dict:
+    """CallSummary / call detail shape. `turns_count` is the counted stored turns. Numbers masked unless reveal."""
     return {
         "call_id": call.call_id,
         "channel": call.channel,
@@ -34,7 +45,7 @@ def call_to_dict(call: Call, reveal: bool = False) -> dict:
         "lang": call.lang,
         "outcome": call.outcome,
         "ai_resolved": call.ai_resolved,
-        "turns_count": call.turns_count,
+        "turns_count": turns,
     }
 
 
@@ -103,12 +114,13 @@ def list_calls(
     calls = query.order_by(desc(Call.started_at), desc(Call.call_id)).limit(limit).all()
 
     items = []
+    counts = count_turns(db, [c.call_id for c in calls])
     latest: dict[str, Turn] = {}  # one query for the latest turn of every listed call
     if calls:
         for t in db.query(Turn).filter(Turn.call_id.in_([c.call_id for c in calls])).order_by(Turn.turn_index):
             latest[t.call_id] = t
     for c in calls:
-        item = call_to_dict(c)
+        item = call_to_dict(c, counts.get(c.call_id, 0))
         # additive: lets the live board show the latest path/tier after a page reload
         last = latest.get(c.call_id)
         item["last_turn"] = None if last is None else {
@@ -154,7 +166,8 @@ def append_turn(
         summary_json=stored,
         created_at=now_utc(),
     ))
-    call.turns_count = max(call.turns_count or 0, turn_summary.turn_index + 1)
+    db.flush()
+    counted = count_turns(db, [call_id]).get(call_id, 0)
     db.commit()
 
     request.app.state.sse_hub.publish("call.turn", {
@@ -164,7 +177,7 @@ def append_turn(
         "tier": turn_summary.tier,
         "lang": turn_summary.lang,
         "priority": turn_summary.priority,
-        "turns_count": call.turns_count,
+        "turns_count": counted,
     })
     return stored
 
@@ -188,15 +201,19 @@ def end_call(
     call.ended_at = to_utc_naive(call_end.ended_at)
     call.outcome = call_end.outcome
     call.ai_resolved = call_end.ai_resolved
-    call.turns_count = call_end.turns_count
+    call.turns_count = call_end.turns_count  # as reported by the runtime; everything we show is the counted value
+    counted = count_turns(db, [call_id]).get(call_id, 0)
     db.commit()
+    if counted != call_end.turns_count:
+        log.warning("call %s: runtime reported %s turns, %s stored; showing %s", call_id, call_end.turns_count,
+                    counted, counted)
 
     request.app.state.sse_hub.publish("call.ended", {
         "call_id": call_id,
         "ended_at": iso_utc(call.ended_at),
         "outcome": call.outcome,
         "ai_resolved": call.ai_resolved,
-        "turns_count": call.turns_count,
+        "turns_count": counted,
     })
     return {"status": "ok", "updated": True}
 
@@ -226,4 +243,4 @@ def get_call_detail(
         write_audit(db, actor, "number_revealed", "call", call_id, {"field": "caller_number"}, commit=False)
     db.commit()
 
-    return {"call": call_to_dict(call, reveal), "turns": [t.summary_json for t in turns]}
+    return {"call": call_to_dict(call, len(turns), reveal), "turns": [t.summary_json for t in turns]}

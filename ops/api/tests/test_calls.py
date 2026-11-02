@@ -71,7 +71,7 @@ def test_end_then_second_end_returns_original(client, auth, fixture_json):
     r2 = client.post("/v1/calls/call-urgent-exam/end", json=end2, headers=auth)
     assert r2.status_code == 200
     call = client.get("/v1/calls/call-urgent-exam", headers=auth).json()["call"]
-    assert call["outcome"] == "transferred" and call["ai_resolved"] is False and call["turns_count"] == 3
+    assert call["outcome"] == "transferred" and call["ai_resolved"] is False and call["turns_count"] == 0  # counted: no turn was stored (the runtime said 3)
 
 
 def test_turn_after_end_is_accepted(client, auth, fixture_json):
@@ -80,7 +80,7 @@ def test_turn_after_end_is_accepted(client, auth, fixture_json):
     r = client.post("/v1/calls/call-urgent-exam/turns", json=turn_body(fixture_json, index=5), headers=auth)
     assert r.status_code == 201
     call = client.get("/v1/calls/call-urgent-exam", headers=auth).json()["call"]
-    assert call["ended_at"] is not None and call["turns_count"] == 6
+    assert call["ended_at"] is not None and call["turns_count"] == 1  # counted, not index + 1
 
 
 def test_404s(client, auth, fixture_json):
