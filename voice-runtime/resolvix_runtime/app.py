@@ -38,6 +38,7 @@ from .ops_client import OpsClient
 from .sessions import SessionState, get_session_registry
 from .shim import init_shim_router
 from .telephony import get_telephony_adapter
+from .outbound import build_outbound
 from .voice_api import VoiceWebApi
 
 logger = logging.getLogger("resolvix_runtime")
@@ -70,11 +71,13 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
     ops_client = OpsClient(settings)
     agora_controller = AgoraController(settings, ops_client)
     voice_web = VoiceWebApi(settings, ops_client)
+    outbound, outbound_router = build_outbound(settings, ops_client)      # disabled unless OUTBOUND_ENABLED=true; mock provider only
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await ops_client.start()
         await voice_web.start()
+        await outbound.start()
         brain = get_brain(settings)
         if hasattr(brain, "ready"):
             try:
@@ -83,6 +86,7 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
                 logger.error("Brain ready() error: %s", e)
         logger.info("Resolvix voice-runtime started on port %s", settings.port)
         yield
+        await outbound.stop()
         await voice_web.stop()
         if hasattr(brain, "aclose"):
             try:
@@ -110,6 +114,9 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
     voice_web_dir = Path(__file__).resolve().parents[2] / "voice-web"
     if (voice_web_dir / "index.html").is_file():
         app.mount("/voice", StaticFiles(directory=voice_web_dir, html=True), name="voice-web")
+
+    # 1c. Outbound phone calling (Exotel Connect + Voicebot bridge design, mock-only build): see integration/OUTBOUND_API.md
+    app.include_router(outbound_router)
 
     # 1b. Browser voice chat API (voice-web, "Plan B"); contract in integration/VOICE_WEB_API.md
     app.mount("/api/voice", voice_web.build_app())
