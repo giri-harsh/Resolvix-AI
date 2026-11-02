@@ -12,7 +12,7 @@ $pf = Join-Path $Run "pids.json"
 $pids = @{}
 if (Test-Path $pf) { (Get-Content $pf -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $pids[$_.Name] = $_.Value } }
 if ($pids.ContainsKey("voice_proxy") -and (Get-Process -Id ([int]$pids["voice_proxy"]) -ErrorAction SilentlyContinue)) { throw "voice proxy already running (pid $($pids['voice_proxy']))" }
-$env:PYTHONUTF8 = "1"; $env:VOICE_PROXY_PORT = "8800"; $env:VOICE_PROXY_UPSTREAM = "http://127.0.0.1:8000"
+$env:PYTHONUTF8 = "1"; $env:VOICE_PROXY_PORT = "8800"; $env:VOICE_PROXY_UPSTREAM = "http://127.0.0.1:8000"; $env:VOICE_PROXY_VOICE_WEB = "1"
 $p = Start-Process -FilePath $Python -ArgumentList @("-X", "utf8", (Join-Path $PSScriptRoot "voice_proxy.py")) -PassThru -WindowStyle Hidden `
      -RedirectStandardOutput (Join-Path $Run "voice_proxy.out.log") -RedirectStandardError (Join-Path $Run "voice_proxy.err.log")
 $pids["voice_proxy"] = $p.Id
