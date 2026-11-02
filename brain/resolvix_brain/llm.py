@@ -26,7 +26,10 @@ log = logging.getLogger("resolvix_brain.llm")
 
 # --------------------------------------------------------------------------- errors / responses
 class LLMError(Exception):
-    """Transport/API failure. ``kind`` is one of timeout | http | empty | config."""
+    """Transport/API failure. ``kind`` is one of timeout | http | empty | truncated | config.
+
+    ``empty``: the model finished (or the stream ended) without any answer text, e.g. Groq's gpt-oss returning only a
+    reasoning trace. ``truncated``: it ran out of ``max_tokens`` before writing any answer text."""
 
     def __init__(self, kind: str, message: str = ""):
         super().__init__(f"{kind}: {message}" if message else kind)
@@ -52,11 +55,13 @@ class LLMResponse:
     completion_tokens: int | None = None
     cached_tokens: int | None = None
     finish_reason: str | None = None
+    reasoning_tokens: int | None = None
 
 
 class LLMClient(Protocol):
     async def complete(self, messages: list[dict[str, str]], *, model: str, max_tokens: int, temperature: float,
-                       reasoning_effort: str, ttft_timeout: float, total_timeout: float) -> LLMResponse: ...
+                       reasoning_effort: str, ttft_timeout: float, total_timeout: float,
+                       require_content: bool = True) -> LLMResponse: ...
 
     async def aclose(self) -> None: ...
 
@@ -171,7 +176,10 @@ class GroqClient:
             self._client = None
 
     async def complete(self, messages, *, model, max_tokens, temperature, reasoning_effort, ttft_timeout,
-                       total_timeout) -> LLMResponse:
+                       total_timeout, require_content: bool = True) -> LLMResponse:
+        """Stream one completion. Only ``delta.content`` is answer text: ``delta.reasoning`` (gpt-oss thinking) is never
+        returned. With ``require_content`` an answer-less stream raises ``LLMError`` (``truncated`` when the token
+        budget ran out, otherwise ``empty``); the warm-up call passes False because it only wants the cache side effect."""
         body = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens,
                 "reasoning_effort": reasoning_effort, "stream": True,
                 "stream_options": {"include_usage": True}}
@@ -180,6 +188,7 @@ class GroqClient:
         ttft_ms = 0
         usage: dict[str, Any] = {}
         finish: str | None = None
+        reasoning_chars = 0
         try:
             async with asyncio.timeout(total_timeout):
                 async with self._http(ttft_timeout).stream(
@@ -204,6 +213,8 @@ class GroqClient:
                             piece = delta.get("content")
                             if (piece or delta.get("reasoning")) and not ttft_ms:
                                 ttft_ms = int((time.perf_counter() - t0) * 1000)
+                            if delta.get("reasoning"):
+                                reasoning_chars += len(delta["reasoning"])
                             if piece:
                                 parts.append(piece)
                             finish = ch.get("finish_reason") or finish
@@ -212,12 +223,16 @@ class GroqClient:
         except httpx.HTTPError as exc:
             raise LLMError("http", type(exc).__name__) from exc
         text = "".join(parts)
-        if not text.strip():
-            raise LLMError("empty", f"no content (finish_reason={finish})")
+        reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        if not text.strip() and require_content:
+            # metadata only, never text: enough to tell "ran out of budget" from "model answered nothing"
+            raise LLMError("truncated" if finish == "length" else "empty",
+                           f"no answer text (finish_reason={finish}, completion_tokens={usage.get('completion_tokens')}, "
+                           f"reasoning_tokens={reasoning_tokens}, reasoning_chars={reasoning_chars})")
         details = usage.get("prompt_tokens_details") or {}
         return LLMResponse(text, model, ttft_ms, int((time.perf_counter() - t0) * 1000),
                            usage.get("prompt_tokens"), usage.get("completion_tokens"),
-                           details.get("cached_tokens"), finish)
+                           details.get("cached_tokens"), finish, reasoning_tokens)
 
 
 # --------------------------------------------------------------------------- deterministic mock
@@ -287,7 +302,7 @@ class MockLLMClient:
         return _meta("escalate", [], "hinglish", "faq") + "Is baare mein mere paas pakki jaankari nahi hai."
 
     async def complete(self, messages, *, model, max_tokens, temperature, reasoning_effort, ttft_timeout,
-                       total_timeout) -> LLMResponse:
+                       total_timeout, require_content: bool = True) -> LLMResponse:
         user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         self.calls.append({"model": model, "user": user, "messages": messages})
         await asyncio.sleep(0)  # a real await point: cancellation tests need one
@@ -340,6 +355,24 @@ class LLMService:
         self.usage: dict[str, UsageTotals] = {}
         self.consecutive_failures = 0
         self.last_failure_at = 0.0
+        self._empty_streak: dict[str, int] = {}      # model -> consecutive answer-less responses
+        self._benched_until: dict[str, float] = {}   # model -> monotonic time until which it is tried second, not first
+
+    # ---- model benching
+    # Groq's gpt-oss-120b intermittently finishes with only a reasoning trace and no answer (measured: most calls on our
+    # prompts, regardless of reasoning_effort or max_tokens, streaming or not). Each such call burns ~1 s before the
+    # fallback model answers, so after ``llm_bench_after_empty`` empties in a row the model is tried second for
+    # ``llm_bench_seconds``. A success resets the count; the model is never removed.
+    def _is_benched(self, model: str) -> bool:
+        return self._benched_until.get(model, 0.0) > time.monotonic()
+
+    def _note_empty(self, model: str) -> None:
+        n = self._empty_streak.get(model, 0) + 1
+        self._empty_streak[model] = n
+        if self.s.llm_bench_after_empty > 0 and n >= self.s.llm_bench_after_empty:
+            self._benched_until[model] = time.monotonic() + self.s.llm_bench_seconds
+            self._empty_streak[model] = 0
+            log.warning("llm %s returned no answer %d times in a row: tried second for %.0fs", model, n, self.s.llm_bench_seconds)
 
     # ---- health
     @property
@@ -375,9 +408,14 @@ class LLMService:
         t0 = time.perf_counter()
         flags: list[str] = []
         last_soft: LLMOutcome | None = None
-        for attempt, model in enumerate((self.s.llm_model, self.s.llm_fallback_model)):
+        order = (self.s.llm_model, self.s.llm_fallback_model)
+        if self.s.llm_model != self.s.llm_fallback_model and self._is_benched(self.s.llm_model):
+            order = (self.s.llm_fallback_model, self.s.llm_model)
+            flags.append("llm_primary_benched")
+        retry_gate = self.s.llm_retry_if_elapsed_under_s
+        for attempt, model in enumerate(order):
             elapsed = time.perf_counter() - t0
-            if attempt == 1 and elapsed >= self.s.llm_retry_if_elapsed_under_s:
+            if attempt == 1 and elapsed >= retry_gate:
                 flags.append("llm_retry_skipped")
                 break
             try:
@@ -390,9 +428,16 @@ class LLMService:
                 continue
             except LLMError as exc:
                 self._record(None, model)
+                if exc.kind in ("empty", "truncated"):
+                    # The provider answered, just without text, and quickly: the other model can still answer inside the
+                    # total budget, so do not apply the short gate meant for slow primaries and unparseable answers.
+                    retry_gate = max(retry_gate, self.s.llm_total_timeout_s - 2.0)
+                if exc.kind == "empty":
+                    self._note_empty(model)
                 flags.append(f"llm_{exc.kind}" if attempt == 0 else "llm_retry_failed")
                 log.warning("llm %s failed: %s", model, exc.kind)
                 continue
+            self._empty_streak[model] = 0
             self._record(resp, model)
             if resp.finish_reason == "length":
                 flags.append("llm_truncated" if attempt == 0 else "llm_retry_failed")
@@ -403,7 +448,8 @@ class LLMService:
                 flags.append("json_retry" if attempt == 0 else "llm_retry_failed")
                 log.warning("llm output rejected (%s)", exc)
                 continue
-            outcome = LLMOutcome(meta, spoken, resp, list(flags), int((time.perf_counter() - t0) * 1000), attempt == 1)
+            outcome = LLMOutcome(meta, spoken, resp, list(flags), int((time.perf_counter() - t0) * 1000),
+                                 model == self.s.llm_fallback_model != self.s.llm_model)
             reason = check(meta, spoken) if (check and attempt == 0) else None
             if reason and attempt == 0:
                 flags.append(reason + "_retry")
@@ -420,9 +466,12 @@ class LLMService:
     async def warmup(self, prefix: str) -> dict[str, Any]:
         """One tiny call with the new prefix so the provider caches it (read ``cached_tokens`` on the next call)."""
         msgs = [{"role": "system", "content": prefix}, {"role": "user", "content": "ping"}]
+        # max_tokens=8 is all spent on reasoning by gpt-oss (finish_reason=length, no answer text): that is fine here,
+        # the call only has to make the provider cache the prefix, so an answer-less response is not an error.
         resp = await self.client.complete(msgs, model=self.s.llm_model, max_tokens=8, temperature=0.0,
                                           reasoning_effort=self.s.llm_reasoning_effort,
-                                          ttft_timeout=self.s.llm_ttft_timeout_s * 3, total_timeout=self.s.llm_total_timeout_s * 3)
+                                          ttft_timeout=self.s.llm_ttft_timeout_s * 3, total_timeout=self.s.llm_total_timeout_s * 3,
+                                          require_content=False)
         return {"ttft_ms": resp.ttft_ms, "total_ms": resp.total_ms, "prompt_tokens": resp.prompt_tokens,
                 "cached_tokens": resp.cached_tokens}
 

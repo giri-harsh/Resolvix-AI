@@ -57,6 +57,8 @@ class BrainSettings:
     llm_ttft_timeout_s: float = 3.0
     llm_total_timeout_s: float = 6.0
     llm_retry_if_elapsed_under_s: float = 1.5
+    llm_bench_after_empty: int = 2              # answer-less responses in a row before a model is tried second (0 = never)
+    llm_bench_seconds: float = 300.0            # how long it is tried second
     groq_base_url: str = "https://api.groq.com/openai/v1"
     kb_source: str = "file:../contracts/kb/sample_kb.jsonl"
     kb_export_service_key: str = ""             # sent as X-Service-Key when the KB source is an http(s) URL
@@ -117,6 +119,8 @@ class BrainSettings:
             llm_ttft_timeout_s=float(s("LLM_TTFT_TIMEOUT_S", str(d.llm_ttft_timeout_s))),
             llm_total_timeout_s=float(s("LLM_TOTAL_TIMEOUT_S", str(d.llm_total_timeout_s))),
             llm_retry_if_elapsed_under_s=float(s("LLM_RETRY_IF_ELAPSED_UNDER_S", str(d.llm_retry_if_elapsed_under_s))),
+            llm_bench_after_empty=int(s("LLM_BENCH_AFTER_EMPTY", str(d.llm_bench_after_empty))),
+            llm_bench_seconds=float(s("LLM_BENCH_SECONDS", str(d.llm_bench_seconds))),
             groq_base_url=s("GROQ_BASE_URL", d.groq_base_url).rstrip("/"),
             kb_source=s("KB_SOURCE", d.kb_source),
             kb_export_service_key=s("KB_EXPORT_SERVICE_KEY", "").strip(),

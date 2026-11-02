@@ -6,7 +6,7 @@
 {"text": "Is MCA available here?", "lang": "en", "expected_kb_ids": ["GEN-002"], "must_contain": ["MCA"]}
 {"text": "Which M.Tech branches are available?", "lang": "en", "expected_kb_ids": ["GEN-003"], "must_contain": ["M.Tech"]}
 {"text": "M.Tech mein kaun si branches hain?", "lang": "hinglish", "expected_kb_ids": ["GEN-003"], "must_contain": ["M.Tech"]}
-{"text": "Does the campus have wifi?", "lang": "en", "expected_kb_ids": ["GEN-004"], "must_contain": ["1400"]}
+{"text": "Does the campus have wifi?", "lang": "en", "expected_kb_ids": ["GEN-004"], "must_contain": ["Wi-Fi"]}
 {"text": "campus mein wifi hai kya aur kitne computers hain?", "lang": "hinglish", "expected_kb_ids": ["GEN-004"], "must_contain": ["1400"]}
 {"text": "How many books does the central library have?", "lang": "en", "expected_kb_ids": ["GEN-005"], "must_contain": ["1,00,000"]}
 {"text": "library mein kitni books hain?", "lang": "hinglish", "expected_kb_ids": ["GEN-005"], "must_contain": ["1,00,000"]}

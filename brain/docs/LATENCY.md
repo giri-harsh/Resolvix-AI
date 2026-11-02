@@ -49,14 +49,30 @@ model/budget from them. Fallbacks if caching fails (PRD): smaller budget, `gpt-o
 - Safety, human-request, urgent pre-check, chit-chat and FAQ-hit turns never call the LLM.
 - The first request after a KB reload pays the cache-miss cost unless the warm-up call (`WARMUP_ON_RELOAD`) succeeded.
 
-## AKGEC draft KB (21 entries, 4,418 prompt tokens): live Groq status (2026-11-02)
-**NOT RUN, blocked: no `GROQ_API_KEY` exists on this machine** (not in the environment, not in a `.env`). No latency, cache-hit or answer-quality number
-for this KB has been measured, and none is claimed. Only the offline results exist: compiles to 4,418 tokens (budget 90,000), and
-`python -m resolvix_brain eval --mock --kb-set akgec-draft` gives retrieval-proxy results (see `data/DATASET_NOTES.md`).
-To run it when a key is available (never commit the key):
-```powershell
-$env:GROQ_API_KEY = "<your key>"          # session only
-$env:LLM_MODE = "live"
-python -m resolvix_brain eval --kb-set akgec-draft      # end to end on the draft KB (temporary approved copy, evaluation only)
-python -m resolvix_brain bench                          # Spike S2 numbers (note: bench uses KB_SOURCE, the sample KB by default)
-```
+## Live Groq on the AKGEC draft KB (21 entries, 4,418 prompt tokens), measured 2026-11-02
+Run with `python -m resolvix_brain eval --kb-set akgec-draft` and `LLM_MODE=live` (temporary approved copy of the draft KB for the run only; nothing
+approved or published). One run per figure below on one machine (Windows, CPU embeddings); these are single measurements, not a benchmark.
+
+| What | Result |
+|---|---|
+| Questions | 44 answerable + 24 must-abstain (`eval/akgec/`), 58 to 60 LLM calls (the rest were answered from the FAQ cache) |
+| End-to-end answerable | 42/44 (95%) in the final run (41/44 in the first run). Misses: one run-to-run LLM variation ("kitne hostel hain": the model abstained) and one turn where both models returned no text (fallback ticket path). The FAQ cache wrongly answered the founding-year question with the director entry in the first run; the director entry was therefore removed from the FAQ cache. |
+| Must-abstain | 24/24 (no unsupported answer, no invented figure) |
+| Fabricated figures in answers | 0 of 42 checked (every number spoken is in the cited entry) |
+| Model that actually answered | `openai/gpt-oss-20b` (56 of 57 successful calls); `gpt-oss-120b` returned no answer text 3 times and was then tried second (benching) |
+| `gpt-oss-20b` latency, successful calls (n=56) | total p50 627 ms, p95 1,229 ms, p99 2,170 ms; time to first token p50 476 ms, p95 1,106 ms |
+| Prompt cache | `cached_tokens > 0` on 55 of 56 calls, mean 93% of the prompt cached |
+| Failures | 4 answer-less responses in 60 calls (3 from 120b, 1 from 20b) |
+
+### The `gpt-oss-120b` empty-answer problem (diagnosed, mitigated, not solved by us)
+- With `reasoning_effort=low` and our real prompts `gpt-oss-120b` often finishes with `finish_reason=stop` and **no answer text**: only a reasoning trace
+  (about 20 reasoning tokens, ~100 more completion tokens that Groq does not return). Same result streaming and non-streaming.
+- Not caused by `max_tokens` vs `max_completion_tokens` (identical results), by the token budget (800 tokens: still empty), or by our stream parser.
+  On requests that had failed once: effort low 10/12 empty, medium 4/12 (300 tokens) and 10/12 (600 tokens), high 3/12 plus 7/12 truncated. `gpt-oss-20b`: 0/12 empty at low.
+- The warm-up call (`max_tokens=8`) always ends with `finish_reason=length` and no text because gpt-oss spends the 8 tokens on reasoning: the warm-up now accepts that.
+- Mitigation in `llm.py`: reasoning is never treated as an answer; an answer-less reply is `empty` (or `truncated` when the budget ran out) with token counts in the error; after 2
+  empties in a row the primary is tried second for 5 minutes (`LLM_BENCH_AFTER_EMPTY`, `LLM_BENCH_SECONDS`); an answer-less reply no longer blocks the fallback retry on the 1.5 s gate.
+- Consequence: with the default models nearly every live answer comes from `gpt-oss-20b`. Set `LLM_MODEL=openai/gpt-oss-20b` to skip the wasted first attempts, or report the issue to Groq.
+
+### Still not measured
+Spike S2 at 60k to 90k prompt tokens (the AKGEC KB is 4.4k tokens), concurrency under load, and the 50-call `bench` against the live API.
