@@ -192,3 +192,11 @@ async def test_idle_calls_are_ended_by_the_server(ops):
         assert get_session_registry().get(call_id) is None
         ends = _end_calls(ops)
         assert len(ends) == 1 and json.loads(ends[0].request.content)["outcome"] == "abandoned"
+
+
+def test_voice_web_page_is_served_same_origin(ops):
+    with _client() as c:
+        r = c.get("/voice/")
+        assert r.status_code == 200 and "<html" in r.text.lower()
+        assert c.get("/voice/style.css").status_code == 200
+        assert c.get("/voice", follow_redirects=False).status_code in (307, 308)

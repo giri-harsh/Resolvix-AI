@@ -17,3 +17,5 @@ Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) ke
 - voice-web R-1 (CORS), R-2 (`/api/test/end` ends the call in ops), R-4 (`ticket_id` in turn response) handled on the legacy `/api/test/*` too. R-3 = streaming in `/api/voice`. R-5 waits for the tunnel.
 - Tests: `voice-runtime/tests/test_voice_web_api.py` (12). Runtime suite 44 passed.
 - Also fixed: OpsClient created a new HTTP client (SSL context, ~0.4 s) for every ops call; now one pooled client.
+
+- voice-web served by the runtime at /voice/ (same origin, no CORS). R-2 (/api/test/end) was already done in 13a8bee. Tunnel (R-5) waits for approval; /api/voice and /voice must be added to the allow-list proxy first.

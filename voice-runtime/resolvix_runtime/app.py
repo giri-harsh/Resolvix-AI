@@ -106,6 +106,11 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.voice_web_cors_origins.split(",") if o.strip()],
                        allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "Accept"], max_age=600)
 
+    # 1a. The voice-web page itself, same origin as the API (no CORS, works through the tunnel). Trailing slash matters: the page uses relative paths.
+    voice_web_dir = Path(__file__).resolve().parents[2] / "voice-web"
+    if (voice_web_dir / "index.html").is_file():
+        app.mount("/voice", StaticFiles(directory=voice_web_dir, html=True), name="voice-web")
+
     # 1b. Browser voice chat API (voice-web, "Plan B"); contract in integration/VOICE_WEB_API.md
     app.mount("/api/voice", voice_web.build_app())
 
