@@ -1,0 +1,60 @@
+{"q": "Q01", "lang": "en", "utterance": "How much is the B.Tech first year fee?", "expected_entry_id": "FEE-201", "must_contain": "1,42,156"}
+{"q": "Q01", "lang": "hi", "utterance": "बीटेक पहले साल की फीस कितनी है", "expected_entry_id": "FEE-201", "must_contain": "1,42,156"}
+{"q": "Q01", "lang": "hinglish", "utterance": "B.Tech ki fees kitni lagti hai", "expected_entry_id": "FEE-201", "must_contain": "1,42,156"}
+{"q": "Q03", "lang": "en", "utterance": "How do I pay my fees online?", "expected_entry_id": "FEE-202", "must_contain": "NEFT"}
+{"q": "Q03", "lang": "hi", "utterance": "फीस ऑनलाइन कैसे जमा करें", "expected_entry_id": "FEE-202", "must_contain": "NEFT"}
+{"q": "Q03", "lang": "hinglish", "utterance": "fees online kaise bharni hai", "expected_entry_id": "FEE-202", "must_contain": "NEFT"}
+{"q": "Q05", "lang": "en", "utterance": "What is the hostel fee for a B.Tech student?", "expected_entry_id": "FEE-203", "must_contain": "1,40,000"}
+{"q": "Q05", "lang": "hi", "utterance": "हॉस्टल की फीस कितनी है", "expected_entry_id": "FEE-203", "must_contain": "1,40,000"}
+{"q": "Q05", "lang": "hinglish", "utterance": "hostel ki fees kitni hai", "expected_entry_id": "FEE-203", "must_contain": "1,40,000"}
+{"q": "Q07", "lang": "en", "utterance": "What scholarships does the college give?", "expected_entry_id": "FEE-204", "must_contain": "25,000"}
+{"q": "Q07", "lang": "hi", "utterance": "जेईई रैंक पर स्कॉलरशिप मिलती है क्या", "expected_entry_id": "FEE-204", "must_contain": "25,000"}
+{"q": "Q07", "lang": "hinglish", "utterance": "scholarship kitne rank tak milti hai", "expected_entry_id": "FEE-204", "must_contain": "25,000"}
+{"q": "Q08", "lang": "en", "utterance": "What is the fee refund policy if I cancel my admission?", "expected_entry_id": "FEE-205", "must_contain": "1000"}
+{"q": "Q08", "lang": "hi", "utterance": "एडमिशन कैंसिल करने पर फीस वापस मिलेगी क्या", "expected_entry_id": "FEE-205", "must_contain": "1000"}
+{"q": "Q08", "lang": "hinglish", "utterance": "admission cancel karne par paise wapas milenge kya", "expected_entry_id": "FEE-205", "must_contain": "1000"}
+{"q": "Q11", "lang": "en", "utterance": "Where can I see the exam datesheet?", "expected_entry_id": "EXM-201", "must_contain": "aktu.ac.in"}
+{"q": "Q11", "lang": "hi", "utterance": "परीक्षा की डेटशीट कहाँ देखें", "expected_entry_id": "EXM-201", "must_contain": "aktu.ac.in"}
+{"q": "Q11", "lang": "hinglish", "utterance": "date sheet kahan milegi", "expected_entry_id": "EXM-201", "must_contain": "aktu.ac.in"}
+{"q": "Q14", "lang": "en", "utterance": "Where can I check my semester result?", "expected_entry_id": "EXM-202", "must_contain": "aktu.ac.in"}
+{"q": "Q14", "lang": "hi", "utterance": "रिजल्ट कहाँ देखें", "expected_entry_id": "EXM-202", "must_contain": "aktu.ac.in"}
+{"q": "Q14", "lang": "hinglish", "utterance": "result kahan dekhna hai", "expected_entry_id": "EXM-202", "must_contain": "aktu.ac.in"}
+{"q": "Q18", "lang": "en", "utterance": "Where can I find the academic calendar?", "expected_entry_id": "ACD-201", "must_contain": "Academic Calendar"}
+{"q": "Q18", "lang": "hi", "utterance": "एकेडमिक कैलेंडर कहाँ मिलेगा", "expected_entry_id": "ACD-201", "must_contain": "Academic Calendar"}
+{"q": "Q18", "lang": "hinglish", "utterance": "academic calendar kahan milega", "expected_entry_id": "ACD-201", "must_contain": "Academic Calendar"}
+{"q": "Q20", "lang": "en", "utterance": "How do I get my migration certificate?", "expected_entry_id": "ACD-202", "must_contain": "Rs 200"}
+{"q": "Q20", "lang": "hi", "utterance": "माइग्रेशन सर्टिफिकेट कैसे मिलेगा", "expected_entry_id": "ACD-202", "must_contain": "Rs 200"}
+{"q": "Q20", "lang": "hinglish", "utterance": "character certificate kaise banwayen", "expected_entry_id": "ACD-202", "must_contain": "Rs 200"}
+{"q": "Q21", "lang": "en", "utterance": "I lost my ID card, what should I do?", "expected_entry_id": "ACD-203", "must_contain": "Rs 300"}
+{"q": "Q21", "lang": "hi", "utterance": "मेरा आईडी कार्ड खो गया है", "expected_entry_id": "ACD-203", "must_contain": "Rs 300"}
+{"q": "Q21", "lang": "hinglish", "utterance": "duplicate ID card kaise banega", "expected_entry_id": "ACD-203", "must_contain": "Rs 300"}
+{"q": "Q28", "lang": "en", "utterance": "Which areas do the college buses cover?", "expected_entry_id": "TRN-201", "must_contain": "16 light vehicles"}
+{"q": "Q28", "lang": "hi", "utterance": "कॉलेज की बसें किन रूट पर चलती हैं", "expected_entry_id": "TRN-201", "must_contain": "16 light vehicles"}
+{"q": "Q28", "lang": "hinglish", "utterance": "college bus kin routes pe chalti hai", "expected_entry_id": "TRN-201", "must_contain": "16 light vehicles"}
+{"q": "Q30", "lang": "en", "utterance": "How do I get a bus pass?", "expected_entry_id": "TRN-202", "must_contain": "Transport Form"}
+{"q": "Q30", "lang": "hi", "utterance": "बस पास कैसे बनेगा", "expected_entry_id": "TRN-202", "must_contain": "Transport Form"}
+{"q": "Q30", "lang": "hinglish", "utterance": "bus pass kaise banega", "expected_entry_id": "TRN-202", "must_contain": "Transport Form"}
+{"q": "Q31", "lang": "en", "utterance": "What are the library timings?", "expected_entry_id": "FAC-201", "must_contain": "8:15"}
+{"q": "Q31", "lang": "hi", "utterance": "लाइब्रेरी कब खुलती है", "expected_entry_id": "FAC-201", "must_contain": "8:15"}
+{"q": "Q31", "lang": "hinglish", "utterance": "library ka time kya hai", "expected_entry_id": "FAC-201", "must_contain": "8:15"}
+{"q": "Q32", "lang": "en", "utterance": "How many books can I borrow from the library?", "expected_entry_id": "FAC-202", "must_contain": "Rs 5"}
+{"q": "Q32", "lang": "hi", "utterance": "लाइब्रेरी से कितनी किताबें मिल सकती हैं", "expected_entry_id": "FAC-202", "must_contain": "Rs 5"}
+{"q": "Q32", "lang": "hinglish", "utterance": "late book return karne par kitna fine lagta hai", "expected_entry_id": "FAC-202", "must_contain": "Rs 5"}
+{"q": "Q33", "lang": "en", "utterance": "Is there a doctor or hospital on campus?", "expected_entry_id": "FAC-203", "must_contain": "Indo-German Hospital"}
+{"q": "Q33", "lang": "hi", "utterance": "कॉलेज में डॉक्टर मिलते हैं क्या", "expected_entry_id": "FAC-203", "must_contain": "Indo-German Hospital"}
+{"q": "Q33", "lang": "hinglish", "utterance": "college mein ambulance hai kya", "expected_entry_id": "FAC-203", "must_contain": "Indo-German Hospital"}
+{"q": "Q34", "lang": "en", "utterance": "What are the canteen timings?", "expected_entry_id": "FAC-204", "must_contain": "9 AM to 5 PM"}
+{"q": "Q34", "lang": "hi", "utterance": "कैंटीन कब खुलती है", "expected_entry_id": "FAC-204", "must_contain": "9 AM to 5 PM"}
+{"q": "Q34", "lang": "hinglish", "utterance": "canteen kab khulta hai", "expected_entry_id": "FAC-204", "must_contain": "9 AM to 5 PM"}
+{"q": "Q35", "lang": "en", "utterance": "What sports facilities are there in the college?", "expected_entry_id": "FAC-205", "must_contain": "gymnasium"}
+{"q": "Q35", "lang": "hi", "utterance": "स्पोर्ट्स की सुविधाएँ क्या हैं", "expected_entry_id": "FAC-205", "must_contain": "gymnasium"}
+{"q": "Q35", "lang": "hinglish", "utterance": "gym hai kya hostel mein", "expected_entry_id": "FAC-205", "must_contain": "gymnasium"}
+{"q": "Q38", "lang": "en", "utterance": "How do I report ragging?", "expected_entry_id": "GEN-201", "must_contain": "Anti-Ragging Committee"}
+{"q": "Q38", "lang": "hi", "utterance": "रैगिंग की शिकायत कहाँ करें", "expected_entry_id": "GEN-201", "must_contain": "Anti-Ragging Committee"}
+{"q": "Q38", "lang": "hinglish", "utterance": "ragging ki complaint kahan karni hai", "expected_entry_id": "GEN-201", "must_contain": "Anti-Ragging Committee"}
+{"q": "Q39", "lang": "en", "utterance": "How do I contact the placement cell?", "expected_entry_id": "PLC-201", "must_contain": "tpo@akgec.ac.in"}
+{"q": "Q39", "lang": "hi", "utterance": "प्लेसमेंट सेल से संपर्क कैसे करें", "expected_entry_id": "PLC-201", "must_contain": "tpo@akgec.ac.in"}
+{"q": "Q39", "lang": "hinglish", "utterance": "placement cell ka contact kya hai", "expected_entry_id": "PLC-201", "must_contain": "tpo@akgec.ac.in"}
+{"q": "Q40", "lang": "en", "utterance": "What is the college address?", "expected_entry_id": "GEN-202", "must_contain": "Delhi-Meerut Expressway"}
+{"q": "Q40", "lang": "hi", "utterance": "कॉलेज का पता क्या है", "expected_entry_id": "GEN-202", "must_contain": "Delhi-Meerut Expressway"}
+{"q": "Q40", "lang": "hinglish", "utterance": "college kaise pahunchen", "expected_entry_id": "GEN-202", "must_contain": "Delhi-Meerut Expressway"}
