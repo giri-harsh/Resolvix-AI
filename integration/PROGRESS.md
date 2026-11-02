@@ -21,3 +21,23 @@ Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) ke
 - voice-web served by the runtime at /voice/ (same origin, no CORS). R-2 (/api/test/end) was already done in 13a8bee. Tunnel (R-5) waits for approval; /api/voice and /voice must be added to the allow-list proxy first.
 
 - Stack restarted from this worktree (SHIM_API_KEY rotated to a 43-char random key). Proxy is in voice-web mode (VOICE_PROXY_VOICE_WEB=1): only the /voice/ page, /api/voice/*, /api/test/{turn,end} and /healthz are forwarded; caller_number is stripped; 120 req/min. Quick cloudflared tunnel points at 127.0.0.1:8800 only (pid recorded, stop_all stops it). Checked through the public URL: page 200, call/turn/end work (turn 0.6 s, ops end posted), /api/sessions/web, /admin/kb/reload, /v1/calls, /docs and /voice/README.md all 404.
+
+## Local voice-web checklist (real Brain, live Groq gpt-oss-20b, page at http://localhost:8000/voice/)
+Run in the built-in Chromium browser by typing into the page's "or type a sentence" box (same code path as speech after the transcript). The microphone and
+the spoken audio itself were NOT exercised (nobody can speak to the browser from this session): STT quality and TTS voice still need a human with a mic.
+Timings are "end of input -> reply received / first audio" as the page shows them.
+
+| Scenario | Result | Detail |
+|---|---|---|
+| FAQ hi ("meri fees ki last date kya hai") | PASS | llm/confident, 706 ms reply / 900 ms audio, B.Tech semester fee date. (One earlier cold run hit llm_timeout at ~2 s and gave the safe fallback + ticket.) |
+| FAQ en ("what time does the hostel gate close") | PASS | llm/confident, 519 / 852 ms, "10 pm weekdays, 11 pm weekends" |
+| Unknown ("bus route 12 timing") | PASS | escalation, 401 / 761 ms, offers ticket, then ticket TR-10xx created after "haan ticket bana do" (335 ms) |
+| Exam P1, English | PASS | R-EXAM-60 P1, ticket + transfer(exam_cell), 830 ms |
+| Exam P1, Hinglish ("exam 15 minute mein hai, hall ticket nahi ho raha") | FIXED, then PASS | was P2 R-DEADLINE-24H because "hall ticket" made the event an admit card; brain/urgency.py now lets an exam within 60 min outrank the admit-card wording. Now R-EXAM-60 P1; asks the paper name, then ticket + transfer (61 ms). Brain tests 516 passed |
+| Emergency ("dost behosh ho gaya") | PASS | R-SAFETY P1, script first, ticket EM-xxxx + staff SMS + transfer in 37 ms, outcome emergency |
+| Human request | PASS | ticket HD-xxxx, "office closed, staff will call", 287 / 451 ms |
+| Complaint by voice (wifi) | PASS | slot filling (block/room, mobile number, readback), ticket HS-1020 + SMS after "haan sahi hai" |
+| Ops side | PASS | tickets listed with priority and reason (EX P1, EM P1, HS P3); ended calls show outcome, ai_resolved and turns; "Answered by AI" = ended calls with ai_resolved true (answered), escalated/emergency/transferred are not counted. Verified through the ops API (the dashboard's source); the dashboard UI was not started in this run |
+
+Findings: (1) the first LLM call after a restart or idle can take 2-3.4 s and sometimes times out (LLM_TTFT_TIMEOUT_S=3) -> fallback + ticket, so keep one warm-up turn before a demo;
+(2) AKGEC KB drafts do not cover bonafide certificate or library timings, so those become tickets; (3) the page's Ticket field stays "-" until it reads ticket_id from the response (R-4 is in place).

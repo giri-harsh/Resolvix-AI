@@ -87,6 +87,15 @@ def test_extract_exam_urgency_facts():
     assert extract_facts("hostel mein wifi password kya hai")["event_type"] == "none"
 
 
+def test_timed_exam_outranks_admit_card_wording_in_hinglish():
+    for text in ("mera data structures ka exam 15 minute mein hai aur hall ticket download nahi ho raha",
+                 "mera exam 20 minute mein hai aur mujhe admit card nahi mil raha"):
+        f = merge_facts(extract_facts(text))
+        assert (f.event_type, f.blocked) == ("exam", True) and f.minutes_to_event in (15, 20)
+    assert extract_facts("exam ka admit card nahi mil raha")["event_type"] == "admit_card"       # no time: still an admit-card issue
+    assert extract_facts("admit card download nahi ho raha")["event_type"] == "admit_card"
+
+
 def test_merge_never_lowers_safety():
     f = merge_facts({"event_type": "exam", "minutes_to_event": 90}, {"event_type": "medical", "safety_flag": True,
                                                                      "minutes_to_event": 20})

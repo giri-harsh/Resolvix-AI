@@ -91,9 +91,11 @@ def extract_facts(text: str) -> dict[str, Any]:
     mins = minutes_to_event(text)
     blocked = has_phrase(text, _BLOCKED_PHRASES)
     event = "none"
-    if has_phrase(text, _ADMIT_PHRASES):
+    if toks & _EXAM_WORDS and mins is not None and mins <= 60:
+        event = "exam"            # "exam 15 minute mein hai, admit card nahi mil raha": an exam within the R-EXAM-60 window outranks the admit-card wording
+    elif has_phrase(text, _ADMIT_PHRASES):
         event = "admit_card"
-    elif toks & _EXAM_WORDS and (mins is not None or blocked):
+    elif toks & _EXAM_WORDS and blocked:
         event = "exam"
     elif toks & _FEE_WORDS and has_phrase(text, _DEADLINE_PHRASES):
         event = "fee_deadline"
