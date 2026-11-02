@@ -1,0 +1,11 @@
+{
+  "name": "resolvix-voice-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser voice chat client for the Resolvix runtime typed-turn API (no dependencies, Chrome)",
+  "scripts": {
+    "mock": "node mock_server/server.js",
+    "test": "node --test test/*.test.js"
+  }
+}

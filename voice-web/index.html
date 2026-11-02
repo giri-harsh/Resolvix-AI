@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resolvix Voice</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Resolvix Voice</h1>
+    <span id="status" class="pill" role="status" aria-live="polite">checking…</span>
+  </header>
+  <main>
+    <section class="panel controls" aria-label="Controls">
+      <label>Runtime URL
+        <input id="runtimeUrl" type="text" spellcheck="false" placeholder="http://localhost:8000" />
+      </label>
+      <label>Speak in
+        <select id="lang">
+          <option value="hi-IN">Hindi / Hinglish (hi-IN)</option>
+          <option value="en-IN">English (en-IN)</option>
+        </select>
+      </label>
+      <label>Hinglish reply voice
+        <select id="hinglishVoice">
+          <option value="hi">hi-IN voice</option>
+          <option value="en">en-IN voice (reads romanised Hindi better)</option>
+        </select>
+      </label>
+      <label class="check"><input id="continuous" type="checkbox" checked /> Continuous (keep listening)</label>
+      <label class="check"><input id="headphones" type="checkbox" checked /> Barge-in while the bot speaks (use headphones)</label>
+      <div class="row">
+        <button id="mic" class="primary" type="button" aria-pressed="false">🎤 Start talking</button>
+        <button id="end" type="button" disabled>End call</button>
+      </div>
+      <div id="interim" class="interim" aria-live="polite"></div>
+      <form id="typed" class="row">
+        <input id="typedText" type="text" placeholder="or type a sentence (same path as speech)" />
+        <button type="submit">Send</button>
+      </form>
+      <p id="notice" class="notice"></p>
+    </section>
+
+    <section class="panel convo" aria-label="Conversation">
+      <h2>Conversation</h2>
+      <ol id="log" class="log"></ol>
+    </section>
+
+    <section class="panel info" aria-label="Last reply">
+      <h2>Last reply</h2>
+      <dl>
+        <dt>Call</dt><dd id="callId">-</dd>
+        <dt>Path / tier</dt><dd id="pathTier">-</dd>
+        <dt>Language</dt><dd id="replyLang">-</dd>
+        <dt>Ticket</dt><dd id="ticket">-</dd>
+        <dt>Actions</dt><dd id="actions">-</dd>
+      </dl>
+      <h2>Timings</h2>
+      <dl>
+        <dt>End of speech → reply received</dt><dd id="tReply">-</dd>
+        <dt>End of speech → first audio</dt><dd id="tAudio">-</dd>
+      </dl>
+      <details><summary>Raw events</summary><pre id="raw"></pre></details>
+    </section>
+  </main>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
