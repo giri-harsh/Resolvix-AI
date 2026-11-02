@@ -32,9 +32,14 @@ class RuntimeSettings:
     agora_customer_secret: str = ""
     asr_vendor: str = "deepgram"
     asr_api_key: str = ""
-    tts_vendor: str = ""
+    asr_language: str = "en"  # English-only for Phase 1.1 real voice test
+    asr_model: str = "nova-3"
+    asr_credential_mode: str = "byok"  # "byok" or "managed"
+    tts_vendor: str = "elevenlabs"
     tts_api_key: str = ""
-    tts_voice_id: str = ""
+    tts_model: str = "eleven_flash_v2_5"
+    tts_voice_id: str = "pNInz6obpgDQGcFmaJgB"
+    tts_credential_mode: str = "byok"  # "byok" or "managed"
     runtime_lines: dict[str, dict[str, str]] = field(default_factory=load_default_runtime_lines)
 
     def __post_init__(self) -> None:
@@ -63,9 +68,14 @@ class RuntimeSettings:
             agora_customer_secret=os.getenv("AGORA_CUSTOMER_SECRET", ""),
             asr_vendor=os.getenv("ASR_VENDOR", "deepgram"),
             asr_api_key=os.getenv("ASR_API_KEY", ""),
-            tts_vendor=os.getenv("TTS_VENDOR", ""),
+            asr_language=os.getenv("ASR_LANGUAGE", "en"),
+            asr_model=os.getenv("ASR_MODEL", "nova-3"),
+            asr_credential_mode=os.getenv("ASR_CREDENTIAL_MODE", "byok").lower(),
+            tts_vendor=os.getenv("TTS_VENDOR", "elevenlabs"),
             tts_api_key=os.getenv("TTS_API_KEY", ""),
-            tts_voice_id=os.getenv("TTS_VOICE_ID", ""),
+            tts_model=os.getenv("TTS_MODEL", "eleven_flash_v2_5"),
+            tts_voice_id=os.getenv("TTS_VOICE_ID", "pNInz6obpgDQGcFmaJgB"),
+            tts_credential_mode=os.getenv("TTS_CREDENTIAL_MODE", "byok").lower(),
             runtime_lines=runtime_lines,
         )
 

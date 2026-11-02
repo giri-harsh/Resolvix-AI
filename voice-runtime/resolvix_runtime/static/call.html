@@ -94,7 +94,16 @@
 
       try {
         const resp = await fetch("/api/sessions/web", { method: "POST" });
-        if (!resp.ok) throw new Error("Failed to start web session: " + await resp.text());
+        if (!resp.ok) {
+          let errText = "HTTP " + resp.status;
+          try {
+            const errJson = await resp.json();
+            errText = errJson.detail?.error?.message || errJson.detail || JSON.stringify(errJson);
+          } catch (_) {
+            errText = await resp.text();
+          }
+          throw new Error("Agent Join Failed: " + errText);
+        }
         const session = await resp.json();
 
         currentCallId = session.call_id;
@@ -158,6 +167,13 @@
       btnEnd.disabled = true;
 
       try {
+        if (currentCallId) {
+          fetch("/api/sessions/web/end", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ call_id: currentCallId })
+          }).catch(e => console.warn("Failed to notify backend of call end:", e));
+        }
         if (localAudioTrack) {
           localAudioTrack.stop();
           localAudioTrack.close();

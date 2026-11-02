@@ -18,6 +18,8 @@ from resolvix_contracts.models import (
     BrainEvent,
     CallChannel,
     CallContext,
+    CallEnd,
+    CallOutcome,
     CallStart,
     DoneEvent,
     ErrorBody,
@@ -45,6 +47,11 @@ STATIC_DIR = Path(__file__).parent / "static"
 class TestTurnRequest(BaseModel):
     call_id: str | None = None
     text: str
+    caller_number: str | None = None
+
+
+class CallEndRequest(BaseModel):
+    call_id: str
 
 
 class TestTurnResponse(BaseModel):
@@ -106,32 +113,58 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
             "contract_version": CONTRACT_VERSION,
         }
 
-    # 3. Web session start (Agora tokens + AI agent join)
+    # 3. Web session start & end (Agora tokens + AI agent join / leave)
     @app.post("/api/sessions/web")
     async def sessions_web():
         session_info = await agora_controller.start_web_session()
         return session_info
 
-    # 4. Typed test turn endpoint (FR-A3)
+    @app.post("/api/sessions/web/end")
+    async def sessions_web_end(payload: CallEndRequest):
+        call_id = payload.call_id
+        registry = get_session_registry()
+        session = registry.get(call_id)
+        if session:
+            session.is_ended = True
+            await session.drain_background_tasks()
+            if session.agora_agent_id:
+                await agora_controller.stop_agora_agent(session.agora_agent_id)
+            brain = get_brain(settings)
+            await brain.end_call(call_id)
+            await ops_client.post_call_end(
+                call_id,
+                CallEnd(
+                    ended_at=datetime.now(timezone.utc),
+                    outcome=session.derive_outcome(),
+                    ai_resolved=len(session.created_tickets) == 0,
+                    turns_count=session.turn_count,
+                ),
+            )
+        return {"status": "ended", "call_id": call_id}
+
+    # 4. Typed test turn & end endpoints (FR-A3)
     @app.post("/api/test/turn", response_model=TestTurnResponse)
     async def test_turn(payload: TestTurnRequest):
         call_id = payload.call_id or f"call-test-{uuid.uuid4().hex[:8]}"
+        caller_number = payload.caller_number
         registry = get_session_registry()
-        session, is_new = registry.get_or_create(call_id=call_id, channel=CallChannel.test)
+        session, is_new = registry.get_or_create(call_id=call_id, channel=CallChannel.test, caller_number=caller_number)
+        if caller_number and not session.caller_number:
+            session.caller_number = caller_number
 
         brain = get_brain(settings)
         if is_new:
             ctx = CallContext(
                 call_id=call_id,
                 channel=CallChannel.test,
-                caller_number=None,
+                caller_number=caller_number,
                 started_at=session.started_at,
             )
             plan = await brain.start_call(ctx)
             call_start = CallStart(
                 call_id=call_id,
                 channel=CallChannel.test,
-                caller_number=None,
+                caller_number=caller_number,
                 started_at=session.started_at,
                 kb_version=plan.kb_version,
                 lang=plan.greeting_lang,
@@ -161,7 +194,7 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
                 substituted_events.append(event.model_dump(mode="json"))
 
             elif event.type == "action":
-                await executor.execute(event.action, lang=current_lang)
+                await executor.execute(event.action, lang=current_lang, blocking=getattr(event, "blocking", True))
                 substituted_events.append(event.model_dump(mode="json"))
 
                 while executor.injected_speech:
@@ -177,6 +210,7 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
 
             elif event.type == "done":
                 assert isinstance(event, DoneEvent)
+                # Background tasks like SMS are tracked in session.background_tasks and continue safely
                 asyncio.create_task(ops_client.post_turn(call_id, event.summary))
                 substituted_events.append(event.model_dump(mode="json"))
 
@@ -185,6 +219,27 @@ def create_app(settings: RuntimeSettings | None = None) -> FastAPI:
             events=substituted_events,
             spoken_text=" ".join(spoken_pieces).strip(),
         )
+
+    @app.post("/api/test/end")
+    async def test_end(payload: CallEndRequest):
+        call_id = payload.call_id
+        registry = get_session_registry()
+        session = registry.get(call_id)
+        if session:
+            session.is_ended = True
+            await session.drain_background_tasks()
+            brain = get_brain(settings)
+            await brain.end_call(call_id)
+            await ops_client.post_call_end(
+                call_id,
+                CallEnd(
+                    ended_at=datetime.now(timezone.utc),
+                    outcome=session.derive_outcome(),
+                    ai_resolved=len(session.created_tickets) == 0,
+                    turns_count=session.turn_count,
+                ),
+            )
+        return {"status": "ended", "call_id": call_id}
 
     # 5. KB reload passthrough (FR-A1 / 4.6)
     @app.post("/admin/kb/reload")

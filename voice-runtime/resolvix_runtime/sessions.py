@@ -23,6 +23,20 @@ class SessionState:
     transfers_connected: bool = False
     emergency: bool = False
     is_ended: bool = False
+    agora_agent_id: str | None = None
+    agora_channel: str | None = None
+    background_tasks: set[asyncio.Task] = field(default_factory=set)
+
+    def add_background_task(self, task: asyncio.Task) -> None:
+        """Register a background task with a strong reference until completion."""
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
+
+    async def drain_background_tasks(self) -> None:
+        """Safely await any remaining background tasks before session cleanup."""
+        if self.background_tasks:
+            await asyncio.gather(*list(self.background_tasks), return_exceptions=True)
+            self.background_tasks.clear()
 
     def next_turn_index(self) -> int:
         self.turn_count += 1
