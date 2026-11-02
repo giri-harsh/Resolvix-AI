@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>Agora join test</title>
+<body style="font:16px sans-serif;padding:20px"><h3>Agora RTC join test (token 007)</h3><pre id="out">starting...</pre>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+<script>
+const out = document.getElementById("out"); const log = (m) => { out.textContent += "\n" + m; console.log(m); };
+(async () => {
+  try {
+    if (typeof AgoraRTC === "undefined") { log("RESULT: FAIL - AgoraRTC SDK did not load"); return; }
+    const cfg = await (await fetch("config.json")).json();
+    const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    client.on("connection-state-change", (cur, prev, reason) => log("connection: " + prev + " -> " + cur + (reason ? " (" + reason + ")" : "")));
+    const uid = await client.join(cfg.appId, cfg.channel, cfg.token, cfg.uid);
+    log("joined channel " + cfg.channel + " as uid " + uid + ", connectionState=" + client.connectionState);
+    await new Promise(r => setTimeout(r, 2500));
+    log("RESULT: " + (client.connectionState === "CONNECTED" ? "PASS - connected with a 007 token" : "FAIL - state " + client.connectionState));
+    await client.leave(); log("left channel");
+  } catch (e) { log("RESULT: FAIL - " + (e.code || "") + " " + (e.message || e)); }
+})();
+</script>

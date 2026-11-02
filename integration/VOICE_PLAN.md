@@ -8,7 +8,9 @@ Open voice blockers for A are in `FINDINGS_FOR_A.md` (A-6 to A-10). Credentials:
 |---|---|
 | Ops, runtime with the real Brain, dashboard, live Groq LLM on this machine | WORKING (32/32 scenario checks on `llm_mode=live`, see PROGRESS.md) |
 | Agora RTC token (A-6), agent join payload (A-7), ASR language + TTS voice (A-8), loud join failure (A-9) | NOT FIXED in `176891c` (A informed via FINDINGS_FOR_A.md) |
-| Agora / Deepgram / ElevenLabs keys | waiting for Harsh |
+| Agora App ID + Certificate | RECEIVED and verified (007 token joins a channel). |
+| Agora Customer ID + Secret, Conversational AI enabled | waiting for Harsh |
+| Deepgram / ElevenLabs keys | waiting (maybe not needed: Agora managed mode, see NEEDED_KEYS.md) |
 | Public tunnel | NOT STARTED: `cloudflared` is not installed on the demo machine; install needs approval (see below) |
 
 ## The public tunnel (needed: Agora's cloud calls our custom-LLM URL)
