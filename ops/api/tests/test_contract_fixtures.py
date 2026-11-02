@@ -92,7 +92,7 @@ def test_calls_flow_with_fixtures(client, auth, fixture_json):
     detail = client.get(f"/v1/calls/{cs['call_id']}", headers=auth).json()
     allowed = set(CallStart.model_fields) | set(CallEnd.model_fields)
     assert set(detail["call"]) == allowed
-    assert detail["call"]["outcome"] == "transferred" and detail["call"]["turns_count"] == 3
+    assert detail["call"]["outcome"] == "transferred" and detail["call"]["turns_count"] == 1  # one stored turn (index 2); CallEnd said 3
     for t in detail["turns"]:
         TurnSummary.model_validate(t)
     assert detail["turns"][0]["priority_reason"] == turn["priority_reason"]

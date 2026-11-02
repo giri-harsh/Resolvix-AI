@@ -8,7 +8,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit
-from ..deps import Principal, actor_of, get_db, get_principal, system_principal
+from ..deps import Principal, actor_of, get_db, get_principal, system_principal, get_read_db
 from ..gaps.cluster import get_strategy
 from ..gaps.service import cluster_to_dict, record_gap
 from ..orm import GapCluster
@@ -69,7 +69,7 @@ def list_clusters(
     request: Request,
     status: Optional[Literal["new", "needs_document", "answered", "ignored"]] = Query(
         None, description="Additive: only clusters with this status"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """Clusters sorted by count desc, then last_seen desc (the dashboard gap table)."""

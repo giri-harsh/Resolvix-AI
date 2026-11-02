@@ -24,11 +24,19 @@ def get_db(request: Request) -> Generator[Session, None, None]:
         db.close()
 
 
+def get_read_db(request: Request) -> Generator[Session, None, None]:
+    """Database session for handlers that only read (deferred transactions, never hold the write lock)."""
+    db = request.app.state.read_session_factory()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def get_principal(
     request: Request,
     x_service_key: str | None = Header(None, alias="X-Service-Key"),
     resolvix_session: str | None = Cookie(None),
-    db: Session = Depends(get_db),
 ) -> Principal:
     """Extract and verify authentication (service key or session cookie)."""
     settings = get_settings(request)
@@ -41,8 +49,11 @@ def get_principal(
     if resolvix_session:
         session_data = decode_session_cookie(resolvix_session, settings)
         if session_data:
-            # the database is the truth: role and department are re-read, and a logged-out cookie is rejected
-            user = db.query(User).filter(User.email == session_data.get("email")).first()
+            # the database is the truth: role and department are re-read, and a logged-out cookie is rejected.
+            # A short session of its own, closed here: authenticating must never keep a transaction (or the write
+            # lock) open for the rest of the request, e.g. while publish waits for the voice runtime.
+            with request.app.state.read_session_factory() as db:
+                user = db.query(User).filter(User.email == session_data.get("email")).first()
             if user is not None and session_data.get("sv") == user.session_version:
                 return Principal(kind="user", email=user.email, role=user.role, department=user.department)
     

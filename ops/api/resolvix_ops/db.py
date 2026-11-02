@@ -21,10 +21,16 @@ def configure_sqlite(dbapi_conn, connection_record):
 
 
 def begin_immediate(connection):
-    """Start transaction with BEGIN IMMEDIATE for concurrency-safe writes."""
-    # This ensures exclusive write lock immediately, preventing conflicts
-    # Use the raw DBAPI connection
-    connection.exec_driver_sql("BEGIN IMMEDIATE")
+    """Start a transaction: BEGIN IMMEDIATE (write lock now) unless the session is a read-only one.
+
+    Read-only sessions (execution option sqlite_deferred, see get_read_session_factory) use a plain deferred BEGIN, which
+    in WAL mode never blocks on, and never blocks, the single writer. Every other session is IMMEDIATE so that
+    read-then-write handlers (ticket ids, idempotency checks) cannot fail on a lock upgrade.
+    """
+    if connection.get_execution_options().get("sqlite_deferred"):
+        connection.exec_driver_sql("BEGIN")
+    else:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
 
 
 def create_db_engine(settings: Settings):
@@ -55,6 +61,12 @@ def create_db_engine(settings: Settings):
 def get_session_factory(engine):
     """Create session factory."""
     return sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
+
+
+def get_read_session_factory(engine):
+    """Sessions for handlers that only read: deferred transactions (no write lock)."""
+    return sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False,
+                        bind=engine.execution_options(sqlite_deferred=True))
 
 
 def get_db(session_factory) -> Session:

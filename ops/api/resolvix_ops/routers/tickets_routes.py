@@ -9,7 +9,7 @@ from sqlalchemy import case, desc
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit
-from ..deps import Principal, actor_of, get_db, get_principal, system_principal
+from ..deps import Principal, actor_of, get_db, get_principal, system_principal, get_read_db
 from ..orm import Ticket, TicketEvent, TicketSeq
 from ..privacy import mask_number
 from ..scope import scope_department
@@ -192,7 +192,7 @@ def list_tickets(
     caller_number: Optional[str] = None,
     limit: int = Query(100, ge=1, le=1000),
     reveal: bool = Query(False, description="Not supported on lists: use GET /v1/tickets/{id}?reveal=true"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """List tickets: P1 first, then newest first (created_at desc, then sequence desc). Numbers are always masked."""
@@ -334,7 +334,7 @@ def add_ticket_event(
 def list_ticket_events(
     ticket_id: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """Ticket events, oldest first."""
