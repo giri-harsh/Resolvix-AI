@@ -37,6 +37,7 @@ ENV = load_env()
 SVC = {"X-Service-Key": ENV["SERVICE_KEY"]}
 http = httpx.Client(timeout=90)
 results: list[dict] = []
+TURN_MS: list[tuple[int, str]] = []        # (wall ms of POST /api/test/turn, brain path)
 
 
 def check(scenario: str, ok: bool, what: str, evidence: str = "") -> bool:
@@ -58,9 +59,12 @@ class Call:
         self.spoken: list[str] = []
 
     def say(self, text: str) -> dict:
+        t0 = time.perf_counter()
         r = http.post(f"{RUNTIME}/api/test/turn", json={"call_id": self.id, "text": text})
         r.raise_for_status()
         j = r.json()
+        path = next((e["summary"]["path"] for e in j["events"] if e["type"] == "done"), "?")
+        TURN_MS.append((int((time.perf_counter() - t0) * 1000), path))
         self.events += j["events"]
         self.spoken.append(j["spoken_text"])
         return j
@@ -307,12 +311,27 @@ def main() -> int:
     fc, ft = (None, None)
     if want("f") or want("h") or want("i"):
         fc, ft = s_f()
-    if want("g"): s_g()
+    live = h["brain"].get("llm_mode") == "live"
+    if want("g") and not live: s_g()
+    elif want("g"): print("SKIP [g] needs the mock LLM's timeout trigger; with a live LLM the fallback path cannot be forced from text")
     if want("h") and fc: s_h(fc)
     if want("i"): s_i(ft)
     stream.stop = True
     (HERE / ".run").mkdir(exist_ok=True)
     (HERE / ".run" / "e2e_results.json").write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
+    def pct(v, q):
+        v = sorted(v)
+        return v[min(len(v) - 1, int(len(v) * q))] if v else 0
+
+    by: dict[str, list[int]] = {}
+    for ms, path in TURN_MS:
+        by.setdefault(path, []).append(ms)
+    print(f"\nturn wall time through the runtime, ms  [llm_mode={h['brain'].get('llm_mode', '?')}]")
+    for path, v in sorted(by.items()):
+        print(f"  {path:<12} n={len(v):<3} p50={pct(v, .5)} p95={pct(v, .95)} max={max(v)}")
+    allv = [m for m, _ in TURN_MS]
+    print(f"  {'all':<12} n={len(allv):<3} p50={pct(allv, .5)} p95={pct(allv, .95)} max={max(allv) if allv else 0}")
+    (HERE / ".run" / "e2e_latency.json").write_text(json.dumps({k: {"n": len(v), "p50": pct(v, .5), "p95": pct(v, .95), "max": max(v)} for k, v in by.items()}, indent=1), encoding="utf-8")
     bad = [r for r in results if not r["ok"]]
     print(f"\n{len(results) - len(bad)} passed, {len(bad)} failed of {len(results)} checks")
     return 1 if bad else 0

@@ -18,6 +18,13 @@ Real values go only in git-ignored files (`integration/.env`, `brain/.env`, `voi
 | 9 | Twilio SID / token / from-number, DLT-registered sender and templates | real SMS and PSTN SMS | OPTIONAL (phone phase) |
 | 10 | A phone number / SIP trunk (Agora PSTN, or Twilio) | calling from a real phone | OPTIONAL (phone phase) |
 
+## Can Agora-managed ASR/TTS replace Deepgram / ElevenLabs? (checked in Agora's docs 2026-11-02)
+**Partly.** Agora has a "managed mode": set `credential_mode: "managed"` in the `asr`, `llm` or `tts` block of the join request and Agora provides and bills the vendor key (no key from us). Per Agora's pricing/managed-mode pages:
+- **ASR:** Deepgram `nova-2` / `nova-3` are listed as managed -> **the Deepgram key can very likely be dropped.** Hindi under managed mode is not documented (the `language` param still applies): test `language=multi` / `hi` first.
+- **TTS:** the managed example uses **MiniMax** (`speech-2.6-turbo` / `speech-2.8-turbo`). **ElevenLabs is key-based only** (and Agora says a paid ElevenLabs plan is needed for reliable use). MiniMax Hindi quality is unverified: test it before relying on it. Sarvam (hi-IN ASR and TTS, key-based) is the other Hindi-specific option Agora lists.
+- **LLM:** managed is OpenAI-class; we do not use it (our own Brain behind the custom-LLM URL).
+- So the minimum key set could be: Agora App ID + Certificate + Customer ID/Secret (+ Conversational AI enabled) and nothing else for STT/TTS, plus the public tunnel. **Fallback if Hindi is poor:** add Deepgram and/or ElevenLabs/Sarvam keys. Sources: https://docs.agora.io/en/ai/build/custom-model-integration/managed-mode and https://docs.agora.io/en/ai/reference/pricing .
+
 ## Per credential
 ### Agora (RTC + Conversational AI)
 - **Env vars:** `AGORA_APP_ID`, `AGORA_APP_CERTIFICATE`, `AGORA_CUSTOMER_ID`, `AGORA_CUSTOMER_SECRET`. Read by `voice-runtime/resolvix_runtime/config.py`; used in `agora_control.py` (token + join call) and the web-call page.
