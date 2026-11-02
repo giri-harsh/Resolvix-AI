@@ -1,5 +1,12 @@
 # Integration progress (newest first)
 
+### 2026-11-03 02:30 - Agora voice: silent agent diagnosed and fixed (PASS: agent audio published; real spoken call heard by the user)
+- Failure: /call joined the RTC channel fine and the agent (uid 1000) joined the same channel, but the agent never published audio and its history stayed empty. Cause: the managed MiniMax voice id Hindi_female_1_v1 (my unverified default) is not valid; Agora still answers join 200 RUNNING and the agent is silent.
+- Evidence (listener already in the channel, 3 short agents): Hindi_female_1_v1 + language_boost Hindi -> no audio; English_captivating_female1 without boost -> audio published after ~2 s, greeting in history, volume 0.7-0.8; English_captivating_female1 + boost Hindi -> audio published. Through /call itself after the fix: agent published audio 0.5 s after joining. The user then confirmed they heard the agent.
+- Mic -> ASR -> brain was already working (earlier calls show transcripts and correct FAQ replies). Agora's GET agents?state=2 lists running agents (used to confirm none stranded).
+- Default voice in run_all.ps1 is now English_captivating_female1. Open: better Hindi voice (valid MiniMax voice id, or ElevenLabs key), repeated identical user text after a barge-in seen once (call-web-147c18e0), one leave call timed out once.
+- integration/DEMO_SCRIPT.md written from the 56/60 top-40 run. kb-data/akgec_kb_approved.jsonl is identical to what is published (0 of 20 differ).
+
 ### 2026-11-03 01:25 - Milestone 1 steps 2-4: top-40 eval (PASS 56/60, 4 safety-by-design misses)
 - KB: 20 top-40 drafts imported (0 flagged), approved and published on this machine (mode live, kb_version a63f6a4e53f7, entry_count 20 = runtime /healthz kb_version).
 - integration/top40_eval_runner.py + TOP40_RESULTS.md: 56/60 utterances pass (en 19/20, hi 19/20, hinglish 18/20), wrong answers 0. First strict run was 27/60 only because must_contain is written in English display form while replies are spoken/Hindi (FINDINGS_FOR_C C-4); the runner now matches through the brain's speech formatting or the entry's own reviewed answer.
@@ -33,7 +40,7 @@
 
 Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) keys, and the tunnel. Meanwhile: C-1 retest when Harsh pushes, CR-7 option 2 / decision 27 (already in `brain/**`, see tests), DEMO_SCRIPT.md.
 
-## Voice-web API (Plan B) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â step 1 done
+## Voice-web API (Plan B) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â step 1 done
 - `integration/VOICE_WEB_API.md` is the contract; implemented in `voice-runtime/resolvix_runtime/voice_api.py` (mounted at `/api/voice`): start call, SSE turn stream (+ `?stream=false` JSON), cancel (CR-8 aware), end (posts `/v1/calls/{id}/end` to ops), config, server idle sweeper, optional bearer key, CORS from `VOICE_WEB_CORS_ORIGINS`.
 - voice-web R-1 (CORS), R-2 (`/api/test/end` ends the call in ops), R-4 (`ticket_id` in turn response) handled on the legacy `/api/test/*` too. R-3 = streaming in `/api/voice`. R-5 waits for the tunnel.
 - Tests: `voice-runtime/tests/test_voice_web_api.py` (12). Runtime suite 44 passed.

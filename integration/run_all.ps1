@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS  Start Ops API (8100), Voice Runtime with the REAL Brain (8000) and the dashboard (5173) on this machine.
 .PARAMETER Python   Python 3.11+ that has contracts, brain, voice-runtime and ops/api installed (see integration/README.md).
 .PARAMETER LlmMode  mock (no Groq key needed, default) or live (needs GROQ_API_KEY in integration/.env or the environment).
@@ -67,7 +67,7 @@ if (-not $env:ASR_LANGUAGE) { $env:ASR_LANGUAGE = "hi" }
 if (-not $env:TTS_CREDENTIAL_MODE) { $env:TTS_CREDENTIAL_MODE = "managed" }
 if (-not $env:TTS_VENDOR) { $env:TTS_VENDOR = "minimax" }
 if (-not $env:TTS_MODEL) { $env:TTS_MODEL = "speech-2.8-turbo" }
-if (-not $env:TTS_VOICE_ID) { $env:TTS_VOICE_ID = "Hindi_female_1_v1" }
+if (-not $env:TTS_VOICE_ID) { $env:TTS_VOICE_ID = "English_captivating_female1" }   # verified audible; "Hindi_female_1_v1" is NOT a valid managed voice (agent stays silent)
 if (-not $env:TTS_LANGUAGE_BOOST) { $env:TTS_LANGUAGE_BOOST = "Hindi" }
 $env:BRAIN_IMPL = "real"
 $env:LLM_MODE = $LlmMode
