@@ -1,6 +1,8 @@
-"""voice-web mode of the allow-list proxy: only the page and its API are forwarded; everything else stays 404."""
+"""voice-web mode of the allow-list proxy: only the page and its API are forwarded; everything else stays 404.
+(Authentication, CSRF, expiry, limits and streaming under auth are in test_voice_proxy_auth.py.)"""
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -14,7 +16,7 @@ from starlette.responses import JSONResponse, PlainTextResponse, StreamingRespon
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import voice_proxy  # noqa: E402
-from test_voice_proxy import Server, raw  # noqa: E402
+from test_voice_proxy import Server  # noqa: E402
 
 CALL = "call-voice-0123456789"
 
@@ -34,16 +36,18 @@ class Upstream:
                 yield b"event: speech\ndata: {}\n\n"
                 yield b"event: done\ndata: {}\n\n"
             return StreamingResponse(sse(), media_type="text/event-stream")
+        if request.url.path == "/api/voice/calls":
+            return JSONResponse({"call_id": CALL}, status_code=201)
         if request.url.path.startswith("/voice"):
             return PlainTextResponse("<html></html>", media_type="text/html")
-        return JSONResponse({"ok": True})
+        return JSONResponse({"ok": True, "status": "ok"})
 
 
 @pytest.fixture()
 def stack():
     up = Upstream()
     with Server(up.app) as u:
-        app = voice_proxy.create_app(f"http://127.0.0.1:{u.port}", voice_web=True, rate_per_min=1000)
+        app = voice_proxy.create_app(f"http://127.0.0.1:{u.port}", voice_web=True, rate_per_min=1000, per_ip_per_min=1000, per_session_per_min=1000)
         with Server(app) as p:
             yield up, p.port
 
@@ -52,12 +56,20 @@ def url(port, path):
     return f"http://127.0.0.1:{port}{path}"
 
 
+@contextlib.contextmanager
+def session(port):
+    """A browser stand-in: loads the page (gets the session cookie) and sends a same-origin Origin on every request."""
+    with httpx.Client(headers={"Origin": f"http://127.0.0.1:{port}"}, timeout=10) as c:
+        assert c.get(url(port, "/voice/")).status_code == 200
+        yield c
+
+
 def test_page_files_are_forwarded(stack):
     up, port = stack
-    for path in ("/voice/", "/voice/index.html", "/voice/style.css", "/voice/src/app.js", "/healthz", "/api/voice/config"):
-        r = httpx.get(url(port, path))
-        assert r.status_code == 200, path
-    assert [c["path"] for c in up.calls][0] == "/voice/"
+    with session(port) as c:
+        for path in ("/voice/", "/voice/index.html", "/voice/style.css", "/voice/src/app.js", "/healthz", "/api/voice/config"):
+            assert c.get(url(port, path)).status_code == 200, path
+    assert up.calls[0]["path"] == "/voice/"
 
 
 @pytest.mark.parametrize("path", [
@@ -83,49 +95,53 @@ def test_wrong_methods_are_405(stack):
 
 def test_caller_number_is_stripped_and_other_fields_pass(stack):
     up, port = stack
-    r = httpx.post(url(port, "/api/test/turn"), json={"text": "hi", "call_id": "c1", "caller_number": "+919999999999"})
-    assert r.status_code == 200
-    assert json.loads(up.calls[-1]["body"]) == {"text": "hi", "call_id": "c1"}
-    httpx.post(url(port, "/api/voice/calls"), json={"caller_number": "+919999999999"})
-    assert json.loads(up.calls[-1]["body"]) == {}
+    with session(port) as c:
+        assert c.post(url(port, "/api/test/turn"), json={"text": "hi", "call_id": "c1", "caller_number": "+919999999999"}).status_code == 200
+        assert json.loads(up.calls[-1]["body"]) == {"text": "hi", "call_id": "c1"}
+        c.post(url(port, "/api/voice/calls"), json={"caller_number": "+919999999999"})
+        assert json.loads(up.calls[-1]["body"]) == {}
 
 
 def test_turn_streams_and_query_is_limited(stack):
     up, port = stack
-    with httpx.stream("POST", url(port, f"/api/voice/calls/{CALL}/turns"), json={"text": "hello"}) as r:
-        assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
-        assert b"event: done" in r.read()
-    assert httpx.post(url(port, f"/api/voice/calls/{CALL}/turns?stream=false"), json={"text": "x"}).status_code == 200
-    for q in ("?stream=maybe", "?a=1", "?stream=true&stream=false"):
-        assert httpx.post(url(port, f"/api/voice/calls/{CALL}/turns{q}"), json={"text": "x"}).status_code == 400
-    assert httpx.post(url(port, f"/api/voice/calls/{CALL}/cancel?stream=true")).status_code == 400
-    assert httpx.get(url(port, "/voice/?x=1")).status_code == 400
+    with session(port) as c:
+        assert c.post(url(port, "/api/voice/calls")).status_code == 201
+        with c.stream("POST", url(port, f"/api/voice/calls/{CALL}/turns"), json={"text": "hello"}) as r:
+            assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+            assert b"event: done" in r.read()
+        assert c.post(url(port, f"/api/voice/calls/{CALL}/turns?stream=false"), json={"text": "x"}).status_code == 200
+        for q in ("?stream=maybe", "?a=1", "?stream=true&stream=false"):
+            assert c.post(url(port, f"/api/voice/calls/{CALL}/turns{q}"), json={"text": "x"}).status_code == 400
+        assert c.post(url(port, f"/api/voice/calls/{CALL}/cancel?stream=true")).status_code == 400
+        assert c.get(url(port, "/voice/?x=1")).status_code == 400
 
 
 def test_empty_body_allowed_only_where_documented(stack):
     up, port = stack
-    assert httpx.post(url(port, "/api/voice/calls")).status_code == 200
-    assert httpx.post(url(port, f"/api/voice/calls/{CALL}/end")).status_code == 200
-    assert httpx.post(url(port, f"/api/voice/calls/{CALL}/turns")).status_code == 415       # JSON required
-    assert httpx.post(url(port, f"/api/voice/calls/{CALL}/turns"), content=b"[]", headers={"Content-Type": "application/json"}).status_code == 400
-    assert httpx.post(url(port, "/api/test/turn"), content=b"{}", headers={"Content-Type": "text/plain"}).status_code == 415
+    with session(port) as c:
+        assert c.post(url(port, "/api/voice/calls")).status_code == 201
+        assert c.post(url(port, f"/api/voice/calls/{CALL}/end")).status_code == 200
+        assert c.post(url(port, f"/api/voice/calls/{CALL}/turns")).status_code == 415       # JSON required
+        assert c.post(url(port, f"/api/voice/calls/{CALL}/turns"), content=b"[]", headers={"Content-Type": "application/json"}).status_code == 400
+        assert c.post(url(port, "/api/test/turn"), content=b"{}", headers={"Content-Type": "text/plain"}).status_code == 415
 
 
 def test_big_bodies_and_cookies_and_odd_headers(stack):
     up, port = stack
-    big = {"text": "x" * 20000}
-    assert httpx.post(url(port, f"/api/voice/calls/{CALL}/turns"), json=big).status_code == 413
-    n = len(up.calls)
-    httpx.post(url(port, "/api/test/turn"), json={"text": "a"}, headers={"Cookie": "s=1", "X-Forwarded-For": "1.2.3.4", "X-Evil": "1", "Authorization": "Bearer t"})
-    h = up.calls[n]["headers"]
-    assert "cookie" not in h and "x-forwarded-for" not in h and "x-evil" not in h and h["authorization"] == "Bearer t"
+    with session(port) as c:
+        assert c.post(url(port, "/api/voice/calls")).status_code == 201
+        assert c.post(url(port, f"/api/voice/calls/{CALL}/turns"), json={"text": "x" * 20000}).status_code == 413
+        n = len(up.calls)
+        c.post(url(port, "/api/test/turn"), json={"text": "a"}, headers={"X-Forwarded-For": "1.2.3.4", "X-Evil": "1", "Authorization": "Bearer t"})
+        h = up.calls[n]["headers"]
+        assert "cookie" not in h and "x-forwarded-for" not in h and "x-evil" not in h and h["authorization"] == "Bearer t"   # the session cookie never reaches the runtime
 
 
-def test_rate_cap():
+def test_global_rate_cap():
     up = Upstream()
     with Server(up.app) as u:
         with Server(voice_proxy.create_app(f"http://127.0.0.1:{u.port}", voice_web=True, rate_per_min=3)) as p:
-            codes = [httpx.get(url(p.port, "/healthz")).status_code for _ in range(5)]
+            codes = [httpx.get(url(p.port, "/api/voice/config")).status_code for _ in range(5)]
     assert codes == [200, 200, 200, 429, 429]
 
 
