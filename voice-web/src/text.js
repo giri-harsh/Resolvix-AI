@@ -65,3 +65,28 @@ export function utteranceLang(kind, voice) {
   if (voice?.lang) return voice.lang;
   return kind === "hi" ? "hi-IN" : "en-IN";
 }
+
+/** Short description of the chosen voice for the diagnostics log. */
+export function describeVoice(voice, lang) {
+  return voice ? `${voice.name} (${voice.lang})${voice.default ? " [default]" : ""}` : `browser default voice for ${lang}`;
+}
+
+/** Recognition error code -> { message, restart, stop } for the UI. restart: silently listen again (continuous mode). */
+export function recognitionIssue(code) {
+  switch (code) {
+    case "network":
+      return { message: "Speech service unreachable: use Google Chrome or Edge (not Brave/Opera), turn off VPN/ad-blocker, or try another network. You can still type below.", restart: false, stop: true };
+    case "not-allowed":
+    case "service-not-allowed":
+      return { message: "Microphone blocked: click the lock/camera icon in the address bar, set Microphone to Allow (and check Windows Settings > Privacy > Microphone), reload, then press the mic again.", restart: false, stop: true };
+    case "no-speech":
+    case "aborted":
+      return { message: "", restart: true, stop: false };
+    case "audio-capture":
+      return { message: "No microphone found: plug one in or pick it in the browser's site settings.", restart: false, stop: true };
+    case "language-not-supported":
+      return { message: "This browser does not support the selected recognition language: try the other one.", restart: false, stop: true };
+    default:
+      return { message: `Speech recognition error: ${code}`, restart: false, stop: false };
+  }
+}
