@@ -862,3 +862,30 @@ async def test_english_only_deepgram_and_elevenlabs_config_defaults():
         assert props["tts"]["params"]["voice_id"] == "pNInz6obpgDQGcFmaJgB"
 
 
+
+
+@pytest.mark.asyncio
+async def test_agora_join_payload_managed_deepgram_and_minimax_has_no_keys():
+    app_id = "970ca35de60c4464bb03a650e680fb9d"
+    settings = RuntimeSettings(
+        port=8000, agora_app_id=app_id, agora_app_certificate="5cfd2fd1755d40ecb729f39468aa3dbb",
+        agora_customer_id="cust-123", agora_customer_secret="secret-456",
+        asr_vendor="deepgram", asr_language="hi", asr_model="nova-3", asr_credential_mode="managed", asr_api_key="must-not-be-sent",
+        tts_vendor="minimax", tts_model="speech-2.8-turbo", tts_voice_id="Hindi_female_1_v1", tts_credential_mode="managed",
+        tts_api_key="must-not-be-sent", tts_group_id="must-not-be-sent", tts_language_boost="Hindi",
+    )
+    controller = AgoraController(settings, OpsClient(settings))
+    captured = []
+    async with respx.mock(base_url="https://api.agora.io", assert_all_called=False) as agora_mock:
+        agora_mock.post(f"/api/conversational-ai-agent/v2/projects/{app_id}/join").mock(
+            side_effect=lambda req: captured.append(json.loads(req.content)) or respx.MockResponse(200, json={"agent_id": "a1", "status": "RUNNING"}))
+        await controller._start_agora_agent("ch", "call-web-x", "https://t.example/v1/chat/completions?call_id=call-web-x", "Namaste", 777)
+    props = captured[0]["properties"]
+    assert props["asr"] == {"vendor": "deepgram", "credential_mode": "managed",
+                            "params": {"language": "hi", "model": "nova-3", "url": "wss://api.deepgram.com/v1/listen"}}
+    tts = props["tts"]
+    assert tts["vendor"] == "minimax" and tts["credential_mode"] == "managed"
+    assert tts["params"]["model"] == "speech-2.8-turbo" and tts["params"]["voice_setting"]["voice_id"] == "Hindi_female_1_v1"
+    assert tts["params"]["language_boost"] == "Hindi" and tts["params"]["audio_setting"]["sample_rate"] == 44100
+    assert "key" not in tts["params"] and "group_id" not in tts["params"] and "key" not in props["asr"]["params"]
+    assert props["idle_timeout"] == 120

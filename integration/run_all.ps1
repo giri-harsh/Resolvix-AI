@@ -59,6 +59,16 @@ elseif ($env:PUBLIC_BASE_URL -notmatch '^https://[A-Za-z0-9.-]+(:\d+)?/?$' -and 
 # SHIM_API_KEY: keep an explicitly supplied one (shell or integration/.env); otherwise generate 32 random bytes and persist them to integration/.env.
 # The runtime reads it from this environment and uses the same value in the Agora agent's llm.api_key, so there is a single source of truth.
 [void](Initialize-ShimApiKey -EnvFile $EnvFile -PublicBaseUrl $env:PUBLIC_BASE_URL)
+# Agora-managed speech (no ASR/TTS keys needed): Deepgram nova-3 + MiniMax. Override any of these in the shell or integration/.env.
+if (-not $env:ASR_CREDENTIAL_MODE) { $env:ASR_CREDENTIAL_MODE = "managed" }
+if (-not $env:ASR_VENDOR) { $env:ASR_VENDOR = "deepgram" }
+if (-not $env:ASR_MODEL) { $env:ASR_MODEL = "nova-3" }
+if (-not $env:ASR_LANGUAGE) { $env:ASR_LANGUAGE = "hi" }
+if (-not $env:TTS_CREDENTIAL_MODE) { $env:TTS_CREDENTIAL_MODE = "managed" }
+if (-not $env:TTS_VENDOR) { $env:TTS_VENDOR = "minimax" }
+if (-not $env:TTS_MODEL) { $env:TTS_MODEL = "speech-2.8-turbo" }
+if (-not $env:TTS_VOICE_ID) { $env:TTS_VOICE_ID = "Hindi_female_1_v1" }
+if (-not $env:TTS_LANGUAGE_BOOST) { $env:TTS_LANGUAGE_BOOST = "Hindi" }
 $env:BRAIN_IMPL = "real"
 $env:LLM_MODE = $LlmMode
 $env:KB_SOURCE = "url:http://localhost:8100/v1/kb/export"

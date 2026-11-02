@@ -151,6 +151,8 @@ class AgoraController:
             "language": self.settings.asr_language,
             "model": self.settings.asr_model,
         }
+        if (self.settings.asr_vendor or "deepgram") == "deepgram":
+            asr_params["url"] = "wss://api.deepgram.com/v1/listen"       # shown in Agora's managed-mode example
         if self.settings.asr_credential_mode != "managed" and self.settings.asr_api_key:
             asr_params["key"] = self.settings.asr_api_key
 
@@ -161,15 +163,32 @@ class AgoraController:
         if self.settings.asr_credential_mode == "managed":
             asr_payload["credential_mode"] = "managed"
 
-        tts_params: dict[str, Any] = {
-            "model_id": self.settings.tts_model,
-            "voice_id": self.settings.tts_voice_id,
-        }
-        if self.settings.tts_credential_mode != "managed" and self.settings.tts_api_key:
-            tts_params["key"] = self.settings.tts_api_key
+        tts_vendor = (self.settings.tts_vendor or "elevenlabs").lower()
+        if tts_vendor == "minimax":
+            # MiniMax (the managed-mode TTS vendor): managed mode needs neither key nor group_id (Agora docs, models/tts/minimax)
+            tts_params: dict[str, Any] = {
+                "url": "wss://api.minimax.io/ws/v1/t2a_v2",
+                "model": self.settings.tts_model,
+                "voice_setting": {"voice_id": self.settings.tts_voice_id, "speed": 1.0},
+                "audio_setting": {"sample_rate": 44100},
+            }
+            if self.settings.tts_language_boost:
+                tts_params["language_boost"] = self.settings.tts_language_boost
+            if self.settings.tts_credential_mode != "managed":
+                if self.settings.tts_api_key:
+                    tts_params["key"] = self.settings.tts_api_key
+                if self.settings.tts_group_id:
+                    tts_params["group_id"] = self.settings.tts_group_id
+        else:
+            tts_params = {
+                "model_id": self.settings.tts_model,
+                "voice_id": self.settings.tts_voice_id,
+            }
+            if self.settings.tts_credential_mode != "managed" and self.settings.tts_api_key:
+                tts_params["key"] = self.settings.tts_api_key
 
         tts_payload: dict[str, Any] = {
-            "vendor": self.settings.tts_vendor or "elevenlabs",
+            "vendor": tts_vendor,
             "params": tts_params,
         }
         if self.settings.tts_credential_mode == "managed":
@@ -183,7 +202,7 @@ class AgoraController:
                 "agent_rtc_uid": str(agent_uid),
                 "remote_rtc_uids": [str(user_uid)],
                 "enable_string_uid": False,
-                "idle_timeout": 120,
+                "idle_timeout": 120,                       # the agent leaves by itself 2 min after the caller disappears (billing guard)
                 "llm": {
                     "vendor": "custom",
                     "style": "openai",

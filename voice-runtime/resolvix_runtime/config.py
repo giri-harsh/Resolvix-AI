@@ -40,6 +40,8 @@ class RuntimeSettings:
     tts_model: str = "eleven_flash_v2_5"
     tts_voice_id: str = "pNInz6obpgDQGcFmaJgB"
     tts_credential_mode: str = "byok"  # "byok" or "managed"
+    tts_language_boost: str = ""       # MiniMax only, e.g. "Hindi"
+    tts_group_id: str = ""             # MiniMax BYOK only (managed mode does not need it)
     voice_web_cors_origins: str = "http://localhost:5174,http://127.0.0.1:5174"   # comma separated; add the tunnel origin here
     voice_web_api_key: str = ""            # optional bearer token for /api/voice (set it whenever the API is reachable from the internet)
     voice_web_idle_timeout_s: float = 120.0
@@ -82,6 +84,8 @@ class RuntimeSettings:
             tts_model=os.getenv("TTS_MODEL", "eleven_flash_v2_5"),
             tts_voice_id=os.getenv("TTS_VOICE_ID", "pNInz6obpgDQGcFmaJgB"),
             tts_credential_mode=os.getenv("TTS_CREDENTIAL_MODE", "byok").lower(),
+            tts_language_boost=os.getenv("TTS_LANGUAGE_BOOST", ""),
+            tts_group_id=os.getenv("TTS_GROUP_ID", ""),
             voice_web_cors_origins=os.getenv("VOICE_WEB_CORS_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174"),
             voice_web_api_key=os.getenv("VOICE_WEB_API_KEY", ""),
             voice_web_idle_timeout_s=float(os.getenv("VOICE_WEB_IDLE_TIMEOUT_S", "120")),

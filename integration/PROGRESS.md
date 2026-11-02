@@ -1,5 +1,13 @@
 # Integration progress (newest first)
 
+### 2026-11-03 00:55 - Milestone 2 steps 7-10: Agora managed join (PASS for join/leave, spoken loop NOT yet tested)
+- Keys present in integration/.env (masked: customer id ...c918, secret ...7717), file git-ignored, no tail-6 match in tracked files.
+- Secured proxy running on 127.0.0.1:8800 (entry key required for the page; /v1/chat/completions needs the runtime's own bearer). A tunnel to it is running (started by the user, pid not recorded here); outside check: /healthz {"status":"ok"}, LLM endpoint 200 with the right bearer (SSE, custom_metadata first chunk, finish, [DONE]), 401 with a wrong one.
+- integration/agora_managed_test.py: join with managed Deepgram nova-3 (language hi) + managed MiniMax speech-2.8-turbo (voice Hindi_female_1_v1, language_boost Hindi), custom LLM = tunnel URL, idle_timeout 60 -> HTTP 200, status RUNNING within 3 s, leave 200, 0.27 agent minutes. ALWAYS leaves in finally.
+- voice-runtime/agora_control.py: MiniMax/Deepgram payloads per Agora docs (managed mode sends no keys), test added (voice-runtime 46 passed). run_all.ps1 defaults to managed speech. POST /api/sessions/web -> agent joined via the runtime in 4.8 s, /end -> leave 200.
+- NOT TESTED: the spoken loop (mic -> Deepgram -> /v1/chat/completions -> MiniMax audio). It needs a person: open http://localhost:8000/call, allow the mic, speak. Unverified: Hindi voice id Hindi_female_1_v1 and asr language "hi" (the Agora docs do not list them); if the voice is silent or wrong, try TTS_VOICE_ID=English_captivating_female1 or ASR_LANGUAGE=multi.
+- Agora docs facts used: join/leave endpoints, managed block shapes (docs.agora.io/en/ai/models/tts/minimax, /asr/deepgram, /build/managed-mode, /build/custom-model-integration/custom-llm); managed LLM only covers OpenAI models, so the custom LLM stays BYOK with our bearer.
+
 ### 2026-11-03 00:35 - Milestone 1 step 1 + eval runner (PASS), waiting on kb-data and Agora keys
 - Merged origin/member-c-ops (8c111da: voice-web streams via /api/voice). Runtime serves /voice/; the page (streaming mode) answered a typed turn end to end; /api/test/end and ticket_id in the turn response were verified earlier (d6db5a7, 13a8bee).
 - integration/top40_eval_runner.py written and smoke-tested on a 3-utterance sample (PASS / ESCALATED / LLM classes, per-language rates, TOP40_RESULTS.md). Needs kb-data/top40_eval.jsonl (not on member-c-ops yet). must_contain should be language-neutral (figures, names): a Hinglish answer says "10 baje", not "10 pm".
@@ -17,7 +25,7 @@
 
 Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) keys, and the tunnel. Meanwhile: C-1 retest when Harsh pushes, CR-7 option 2 / decision 27 (already in `brain/**`, see tests), DEMO_SCRIPT.md.
 
-## Voice-web API (Plan B) â€” step 1 done
+## Voice-web API (Plan B) Ã¢â‚¬â€ step 1 done
 - `integration/VOICE_WEB_API.md` is the contract; implemented in `voice-runtime/resolvix_runtime/voice_api.py` (mounted at `/api/voice`): start call, SSE turn stream (+ `?stream=false` JSON), cancel (CR-8 aware), end (posts `/v1/calls/{id}/end` to ops), config, server idle sweeper, optional bearer key, CORS from `VOICE_WEB_CORS_ORIGINS`.
 - voice-web R-1 (CORS), R-2 (`/api/test/end` ends the call in ops), R-4 (`ticket_id` in turn response) handled on the legacy `/api/test/*` too. R-3 = streaming in `/api/voice`. R-5 waits for the tunnel.
 - Tests: `voice-runtime/tests/test_voice_web_api.py` (12). Runtime suite 44 passed.
