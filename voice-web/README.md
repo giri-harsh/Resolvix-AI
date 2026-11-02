@@ -35,7 +35,7 @@ If Kamal serves the `voice-web/` files from the runtime under `/voice/` (note th
 ## Tests
 ```bash
 cd voice-web
-node --test test/*.test.js          # 28 tests: sentence splitter, ticket-id speller, voice choice, idle timer, barge-in, turn client against the mock
+node --test test/*.test.js          # 33 tests (incl. real-globals tests with browser-like strict setTimeout/fetch): sentence splitter, ticket-id speller, voice choice, idle timer, barge-in, turn client against the mock
 ```
 The manual checklist and its results are in **TEST_RESULTS.md**.
 

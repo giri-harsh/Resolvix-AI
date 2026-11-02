@@ -1,7 +1,7 @@
 // Page wiring: Web Speech API recognition -> typed-turn API -> speechSynthesis, with barge-in and an idle timeout.
 import { endCall, health, sendTurn } from "./api.js";
 import { IdleTimer, TurnController } from "./control.js";
-import { pickVoice, spellTicketIds, splitSentences, utteranceLang, voiceKind } from "./text.js";
+import { describeVoice, pickVoice, recognitionIssue, spellTicketIds, splitSentences, utteranceLang, voiceKind } from "./text.js";
 
 const $ = (id) => document.getElementById(id);
 const IDLE_MS = 60_000;
@@ -42,6 +42,25 @@ const ms = (n) => `${Math.round(n)} ms`;
 const runtimeUrl = () => $("runtimeUrl").value.trim();
 const notice = (text) => { $("notice").textContent = text || ""; };
 
+/** Append a line to the Raw events panel (diagnostics: recognition errors, voice used). */
+function diag(text) {
+  const el = $("diag");
+  el.textContent += `${new Date().toLocaleTimeString()}  ${text}
+`;
+}
+
+/** Chrome only lets speechSynthesis speak after the page had a user gesture: unlock it from a click/submit handler. */
+let primed = false;
+function primeSpeech() {
+  if (primed || !synth) return;
+  primed = true;
+  try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    synth.speak(u);
+  } catch (err) { diag(`speech unlock failed: ${err}`); }
+}
+
 function addLog(kind, text, extra = "") {
   const li = document.createElement("li");
   li.className = kind;
@@ -57,7 +76,7 @@ async function pollHealth() {
   el.textContent = state === "ok" ? "runtime connected" : state === "degraded" ? "runtime degraded" : "runtime unreachable";
   el.className = `pill ${state === "ok" ? "ok" : state === "degraded" ? "warn" : "bad"}`;
 }
-setInterval(pollHealth, 8000);
+window.setInterval(pollHealth, 8000);
 pollHealth();
 
 // ---------------------------------------------------------------- recognition
@@ -86,13 +105,14 @@ function startRecognition() {
     }
   };
   recognition.onerror = (e) => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") { notice("Microphone blocked: allow it in the address bar, then press the mic again."); stopListening(); }
-    else if (e.error === "network") notice("Speech recognition needs an internet connection (Chrome sends audio to Google).");
-    else if (e.error !== "no-speech" && e.error !== "aborted") notice(`Speech recognition error: ${e.error}`);
+    diag(`recognition error: ${e.error}`);
+    const issue = recognitionIssue(e.error);
+    if (issue.message) notice(issue.message);
+    if (issue.stop) stopListening(); // no-speech / aborted: onend restarts silently while listening
   };
   recognition.onend = () => {
     recognition = null;
-    if (listening && !pausedForSpeech) setTimeout(startRecognition, 250); // Chrome ends sessions on its own: keep going
+    if (listening && !pausedForSpeech) window.setTimeout(startRecognition, 250); // Chrome ends sessions on its own: keep going
   };
   try { recognition.start(); } catch { recognition = null; }
 }
@@ -114,6 +134,7 @@ function setListening(on) {
 function stopListening() { setListening(false); stopRecognition(); $("interim").textContent = ""; }
 
 $("mic").addEventListener("click", () => {
+  primeSpeech();
   const wasSpeaking = controller.speaking || synth.speaking;
   if (wasSpeaking) bargeIn("mic pressed"); // pressing the mic always silences the bot at once
   if (listening && !wasSpeaking) return stopListening();
@@ -181,7 +202,9 @@ function speakReply(turnId, result) {
   const voice = pickVoice(synth.getVoices(), kind, { hinglishVoice: $("hinglishVoice").value });
   if (!$("headphones").checked && listening) { pausedForSpeech = true; stopRecognition(); } // no echo of the bot into the mic
   pendingEnd = s.ended;
-  controller.speak(turnId, sentences, { voice, lang: utteranceLang(kind, voice) });
+  const lang = utteranceLang(kind, voice);
+  diag(`speaking with ${describeVoice(voice, lang)}; ${synth.getVoices().length} voices installed`);
+  controller.speak(turnId, sentences, { voice, lang });
 }
 
 // ---------------------------------------------------------------- end of call
@@ -201,6 +224,7 @@ async function finishCall(reason) {
 $("end").addEventListener("click", () => finishCall("End call pressed"));
 $("typed").addEventListener("submit", (e) => {
   e.preventDefault();
+  primeSpeech();
   const text = $("typedText").value.trim();
   if (!text) return;
   $("typedText").value = "";

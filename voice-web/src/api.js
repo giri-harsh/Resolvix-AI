@@ -35,7 +35,7 @@ export function summariseEvents(events, spokenText) {
 }
 
 /** POST /api/test/turn. The first turn of a call is sent with callId = null: the runtime starts the call and returns its id. */
-export async function sendTurn({ runtimeUrl, callId, text, signal, fetchImpl = globalThis.fetch }) {
+export async function sendTurn({ runtimeUrl, callId, text, signal, fetchImpl = (...args) => globalThis.fetch(...args) }) {
   const t0 = Date.now();
   let resp;
   try {
@@ -64,7 +64,7 @@ export async function sendTurn({ runtimeUrl, callId, text, signal, fetchImpl = g
  * End the call. The stock runtime has no end endpoint for typed calls (REQUESTS_FOR_KAMAL R-2): we try POST /api/test/end
  * and report { ok:false, unsupported:true } when it does not exist, so the page can say so instead of failing.
  */
-export async function endCall({ runtimeUrl, callId, fetchImpl = globalThis.fetch }) {
+export async function endCall({ runtimeUrl, callId, fetchImpl = (...args) => globalThis.fetch(...args) }) {
   if (!callId) return { ok: true, skipped: true };
   try {
     const resp = await fetchImpl(`${trim(runtimeUrl)}/api/test/end`, {
@@ -81,9 +81,9 @@ export async function endCall({ runtimeUrl, callId, fetchImpl = globalThis.fetch
 }
 
 /** GET /healthz -> "ok" | "degraded" | "down" */
-export async function health({ runtimeUrl, fetchImpl = globalThis.fetch, timeoutMs = 2500 }) {
+export async function health({ runtimeUrl, fetchImpl = (...args) => globalThis.fetch(...args), timeoutMs = 2500 }) {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  const timer = globalThis.setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const resp = await fetchImpl(`${trim(runtimeUrl)}/healthz`, { signal: ctl.signal });
     if (!resp.ok) return "down";
@@ -92,6 +92,6 @@ export async function health({ runtimeUrl, fetchImpl = globalThis.fetch, timeout
   } catch {
     return "down";
   } finally {
-    clearTimeout(timer);
+    globalThis.clearTimeout(timer);
   }
 }

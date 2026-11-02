@@ -1,6 +1,6 @@
 # Test results
 
-## 1. Unit tests: `node --test test/*.test.js` -> **28 passed, 0 failed** (Node 24)
+## 1. Unit tests: `node --test test/*.test.js` -> **33 passed, 0 failed** (Node 24; 5 added for the unbound-API bug: real globals, recognition error mapping)
 Sentence splitter (danda, decimals, abbreviations), ticket-id speller, ticket-id extraction, voice choice and Hinglish override, idle timer
 (fake clock: fires once, reset, pause/resume, stop), barge-in controller (cancels speech, aborts the request in flight, invalidates the old turn,
 stale answers ignored), turn client against the mock server (first turn starts a call, ids reused, abort -> `AbortError`, unreachable runtime and HTTP

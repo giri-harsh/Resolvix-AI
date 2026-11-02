@@ -1,8 +1,10 @@
+// Browser functions (setTimeout, fetch, ...) throw "Illegal invocation" when called with another object as `this`,
+// so defaults are arrow wrappers that call them on globalThis; never store `globalThis.fn` and call it as `obj.fn()`.
 // Idle timer and the barge-in / turn controller. Both take their browser dependencies as arguments so they are testable.
 
 /** Calls onIdle after `ms` without activity. reset() on any activity; pause() while the bot is speaking or a turn is pending. */
 export class IdleTimer {
-  constructor(ms, onIdle, { setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout } = {}) {
+  constructor(ms, onIdle, { setTimeoutFn = (fn, ms) => globalThis.setTimeout(fn, ms), clearTimeoutFn = (h) => globalThis.clearTimeout(h) } = {}) {
     this.ms = ms;
     this.onIdle = onIdle;
     this._set = setTimeoutFn;
