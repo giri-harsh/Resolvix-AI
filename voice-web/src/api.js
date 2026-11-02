@@ -7,6 +7,7 @@ export class ApiError extends Error {
   constructor(message, status = 0) {
     super(message);
     this.status = status;
+    this.code = null; // error-envelope code from /api/voice/*, when there is one
   }
 }
 
@@ -34,6 +35,11 @@ export function summariseEvents(events, spokenText) {
   };
 }
 
+/** The runtime now returns ticket_id itself (R-4): prefer it over the regex on the spoken text. */
+function withTicket(summary, ticketId) {
+  return typeof ticketId === "string" && ticketId ? { ...summary, ticketId } : summary;
+}
+
 /** POST /api/test/turn. The first turn of a call is sent with callId = null: the runtime starts the call and returns its id. */
 export async function sendTurn({ runtimeUrl, callId, text, signal, fetchImpl = (...args) => globalThis.fetch(...args) }) {
   const t0 = Date.now();
@@ -57,7 +63,7 @@ export async function sendTurn({ runtimeUrl, callId, text, signal, fetchImpl = (
     throw new ApiError("Runtime returned invalid JSON", resp.status);
   }
   const spoken = String(data.spoken_text ?? "");
-  return { callId: data.call_id, spokenText: spoken, events: data.events ?? [], summary: summariseEvents(data.events, spoken), ms: Date.now() - t0 };
+  return { callId: data.call_id, spokenText: spoken, events: data.events ?? [], summary: withTicket(summariseEvents(data.events, spoken), data.ticket_id), ms: Date.now() - t0 };
 }
 
 /**

@@ -79,7 +79,9 @@ export class TurnController {
   /** Start a new turn: aborts any request still in flight and returns { turnId, signal }. */
   beginTurn() {
     this.abort?.abort();
+    if (this.speaking) { this.synth.cancel(); this.pendingSentences = 0; this.speaking = false; } // the old turn's speech is stale now
     this.abort = new AbortController();
+    this._firstQueued = false;
     this.turnId += 1;
     return { turnId: this.turnId, signal: this.abort.signal };
   }
@@ -89,20 +91,23 @@ export class TurnController {
   }
 
   /** Queue the sentences; the first one's start is reported through onFirstAudio (end of speech -> first audio timing). */
-  speak(turnId, sentences, { voice = null, lang = "en-IN", rate = 1 } = {}) {
+  speak(turnId, sentences, { voice = null, lang = "en-IN", rate = 1, report = true } = {}) {
     if (!this.isCurrent(turnId) || !sentences.length) return;
     this.speaking = true;
     this.pendingSentences += sentences.length;
-    sentences.forEach((sentence, index) => {
+    sentences.forEach((sentence) => {
       const u = this.makeUtterance(sentence);
       u.lang = lang;
       u.rate = rate;
       if (voice) u.voice = voice;
-      if (index === 0) u.onstart = () => this.isCurrent(turnId) && this.onFirstAudio(this.now());
+      if (report && !this._firstQueued) {
+        this._firstQueued = true; // only the first sentence of the turn reports "first audio"
+        u.onstart = () => this.isCurrent(turnId) && this.onFirstAudio(this.now());
+      }
       const finish = () => {
         if (!this.isCurrent(turnId)) return;
         this.pendingSentences = Math.max(0, this.pendingSentences - 1);
-        if (this.pendingSentences === 0) {
+        if (this.pendingSentences === 0 && !this._requestOpen) { // a stream may still deliver more sentences
           this.speaking = false;
           this.onSpeechEnd();
         }
@@ -132,5 +137,9 @@ export class TurnController {
 
   markRequestDone() {
     this._requestOpen = false;
+    if (this.speaking && this.pendingSentences === 0) { // the queue ran dry while the stream was still open
+      this.speaking = false;
+      this.onSpeechEnd();
+    }
   }
 }
