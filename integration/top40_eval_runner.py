@@ -79,7 +79,7 @@ def expand(rows: list[dict]) -> list[dict]:
     """-> one item per (question, language)."""
     items = []
     for i, row in enumerate(rows, 1):
-        qid = str(first(row, "id", "qid", "question_id", default=f"Q{i:02d}"))
+        qid = str(first(row, "id", "qid", "q", "question_id", default=f"Q{i:02d}"))
         expected = first(row, "expected_entry_id", "entry_id", "expected_id")
         must = as_list(first(row, "must_contain", "contains", default=[]))
         must_not = as_list(first(row, "must_not_contain", default=[]))
