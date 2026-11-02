@@ -1,5 +1,13 @@
 # Integration progress (newest first)
 
+### 2026-11-03 01:25 - Milestone 1 steps 2-4: top-40 eval (PASS 56/60, 4 safety-by-design misses)
+- KB: 20 top-40 drafts imported (0 flagged), approved and published on this machine (mode live, kb_version a63f6a4e53f7, entry_count 20 = runtime /healthz kb_version).
+- integration/top40_eval_runner.py + TOP40_RESULTS.md: 56/60 utterances pass (en 19/20, hi 19/20, hinglish 18/20), wrong answers 0. First strict run was 27/60 only because must_contain is written in English display form while replies are spoken/Hindi (FINDINGS_FOR_C C-4); the runner now matches through the brain's speech formatting or the entry's own reviewed answer.
+- Misses (all ESCALATED by safety, not changed): Q38 "How do I report ragging?" in all 3 languages and Q33 hinglish "ambulance hai kya" (FINDINGS_FOR_C C-5, needs Harsh's decision).
+- Typed-path latency: FAQ fast path 20-70 ms per turn; LLM-path turns 0.5-1.4 s; first turn after idle up to 3.6 s (cold LLM). Browser first-audio numbers still to be recorded from a real call.
+- No brain fix was needed beyond the Hinglish exam-within-60-min fix of the previous step. 
+- Next: spoken checks (human), Agora spoken loop (human), then latency and DEMO_SCRIPT.md.
+
 ### 2026-11-03 00:55 - Milestone 2 steps 7-10: Agora managed join (PASS for join/leave, spoken loop NOT yet tested)
 - Keys present in integration/.env (masked: customer id ...c918, secret ...7717), file git-ignored, no tail-6 match in tracked files.
 - Secured proxy running on 127.0.0.1:8800 (entry key required for the page; /v1/chat/completions needs the runtime's own bearer). A tunnel to it is running (started by the user, pid not recorded here); outside check: /healthz {"status":"ok"}, LLM endpoint 200 with the right bearer (SSE, custom_metadata first chunk, finish, [DONE]), 401 with a wrong one.
@@ -25,7 +33,7 @@
 
 Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) keys, and the tunnel. Meanwhile: C-1 retest when Harsh pushes, CR-7 option 2 / decision 27 (already in `brain/**`, see tests), DEMO_SCRIPT.md.
 
-## Voice-web API (Plan B) Ã¢â‚¬â€ step 1 done
+## Voice-web API (Plan B) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â step 1 done
 - `integration/VOICE_WEB_API.md` is the contract; implemented in `voice-runtime/resolvix_runtime/voice_api.py` (mounted at `/api/voice`): start call, SSE turn stream (+ `?stream=false` JSON), cancel (CR-8 aware), end (posts `/v1/calls/{id}/end` to ops), config, server idle sweeper, optional bearer key, CORS from `VOICE_WEB_CORS_ORIGINS`.
 - voice-web R-1 (CORS), R-2 (`/api/test/end` ends the call in ops), R-4 (`ticket_id` in turn response) handled on the legacy `/api/test/*` too. R-3 = streaming in `/api/voice`. R-5 waits for the tunnel.
 - Tests: `voice-runtime/tests/test_voice_web_api.py` (12). Runtime suite 44 passed.

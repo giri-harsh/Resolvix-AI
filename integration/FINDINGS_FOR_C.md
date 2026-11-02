@@ -18,3 +18,14 @@ Typed-test calls are never ended (FINDINGS_FOR_A.md A-2), so `outcome` / `ai_res
 
 ## Verified OK (no action)
 Idempotency (calls 201/200, tickets 201/200 with the original id, SMS 202/200 with the original result), 401 on a wrong key, 403 for the service key on publish, department-scoped staff (other department gets 404), one `status_change` SMS per change, two `staff_alert` SMS for an emergency, `alert.p1` on `/v1/stream`, gap clustering, `/v1/kb/export` excludes drafts. Own suites: pytest 550 passed / 2 skipped, smoke 43 PASS, e2e_journeys 30 PASS, dashboard build OK and 239 vitest tests passed.
+
+## C-4 eval data: must_contain is written in English display form (kb-data/top40_eval.jsonl)
+Evidence: the typed turn returns the TTS form of the answer: "1,42,156" is spoken "1 lakh 42 thousand 156 rupees", Hindi/Hinglish replies are the entry's Hindi answer
+(Devanagari, names transliterated: "NEFT" -> "एनईएफटी", "Transport Form" -> "ट्रांसपोर्ट फॉर्म"). A literal match on must_contain therefore failed 33 of 60 correct answers (27/60 strict).
+Workaround in integration/top40_eval_runner.py: must_contain also matches through the brain's own speech formatting, and a reply that is the expected entry's own reviewed
+answer in the reply language counts as a pass ("entry verbatim", shown separately in TOP40_RESULTS.md). Suggested: keep must_contain as is, or add a language-neutral fact (digits only, e.g. "142156").
+
+## C-5 eval expectations vs the safety rules (Q38 all languages, Q33 hinglish)
+"How do I report ragging?" (Q38) and "college mein ambulance hai kya" (Q33 hinglish) hit the safety lexicon (harassment / medical), so the brain starts the emergency script and
+transfer instead of answering the FAQ. Not changed: safety rules are never weakened to pass a question. Options for Harsh: (a) accept these as expected escalations, (b) reword the utterances
+("anti-ragging committee kya hai", "campus mein hospital hai kya") for the demo script, (c) decide a policy that an informational ragging question may be answered with the entry AND offer a transfer (needs a brain change and your sign-off).
