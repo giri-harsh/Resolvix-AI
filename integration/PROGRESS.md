@@ -1,5 +1,10 @@
 # Integration progress (newest first)
 
+### 2026-11-03 00:35 - Milestone 1 step 1 + eval runner (PASS), waiting on kb-data and Agora keys
+- Merged origin/member-c-ops (8c111da: voice-web streams via /api/voice). Runtime serves /voice/; the page (streaming mode) answered a typed turn end to end; /api/test/end and ticket_id in the turn response were verified earlier (d6db5a7, 13a8bee).
+- integration/top40_eval_runner.py written and smoke-tested on a 3-utterance sample (PASS / ESCALATED / LLM classes, per-language rates, TOP40_RESULTS.md). Needs kb-data/top40_eval.jsonl (not on member-c-ops yet). must_contain should be language-neutral (figures, names): a Hinglish answer says "10 baje", not "10 pm".
+- BLOCKED (human): (a) kb-data/top40_kb.jsonl + top40_eval.jsonl from Harsh; (b) AGORA_CUSTOMER_ID / AGORA_CUSTOMER_SECRET are not in integration/.env (the copy in the second worktree has a 6-character secret; D:\hackathon\tally\.env is another project and was not used).
+
 | Time (IST) | Step | Result | Evidence |
 |---|---|---|---|
 | 2026-11-02 night | Agora credentials check (App ID + Certificate) | **PASS** | `.env` values present and plausible (32 hex each). Built a real AccessToken2 (`007`) with Agora's official `AgoraIO/Tools` builder and joined a channel from the browser with `AgoraRTC_N.js`: `CONNECTING -> CONNECTED`, "RESULT: PASS - connected with a 007 token". So the App ID, certificate and token approach are valid; the fix for A-6 is to use that builder. Not yet possible: the AI agent join (needs Customer ID/Secret + Conversational AI enabled) and the public tunnel. Reproducible with `integration/agora_join_test/`. |
@@ -12,7 +17,7 @@
 
 Next: STEP 3 needs A to fix A-6..A-9, the Agora (and STT/TTS or managed mode) keys, and the tunnel. Meanwhile: C-1 retest when Harsh pushes, CR-7 option 2 / decision 27 (already in `brain/**`, see tests), DEMO_SCRIPT.md.
 
-## Voice-web API (Plan B) — step 1 done
+## Voice-web API (Plan B) â€” step 1 done
 - `integration/VOICE_WEB_API.md` is the contract; implemented in `voice-runtime/resolvix_runtime/voice_api.py` (mounted at `/api/voice`): start call, SSE turn stream (+ `?stream=false` JSON), cancel (CR-8 aware), end (posts `/v1/calls/{id}/end` to ops), config, server idle sweeper, optional bearer key, CORS from `VOICE_WEB_CORS_ORIGINS`.
 - voice-web R-1 (CORS), R-2 (`/api/test/end` ends the call in ops), R-4 (`ticket_id` in turn response) handled on the legacy `/api/test/*` too. R-3 = streaming in `/api/voice`. R-5 waits for the tunnel.
 - Tests: `voice-runtime/tests/test_voice_web_api.py` (12). Runtime suite 44 passed.
