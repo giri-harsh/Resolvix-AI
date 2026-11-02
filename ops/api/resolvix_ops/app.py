@@ -14,7 +14,7 @@ from .logfilter import install_access_log_masking
 from .timeutil import iso_utc
 from .ratelimit import SlidingWindowLimiter
 from .config import Settings, load_settings
-from .db import create_db_engine, get_session_factory
+from .db import create_db_engine, get_read_session_factory, get_session_factory
 from .errors import validation_error_handler, http_exception_handler, general_exception_handler
 from .orm import Base, Ticket, TicketSeq
 from .routers import health, auth_routes, config_routes
@@ -107,6 +107,7 @@ def create_app(settings: Settings | None = None, notifier: Notifier | None = Non
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = session_factory
+    app.state.read_session_factory = get_read_session_factory(engine)
     app.state.departments_config = departments_config
     app.state.notifier = notifier
     app.state.sms = sms_service

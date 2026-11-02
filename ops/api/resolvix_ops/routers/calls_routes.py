@@ -8,7 +8,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit
-from ..deps import Principal, actor_of, get_db, get_principal, system_principal
+from ..deps import Principal, actor_of, get_db, get_principal, system_principal, get_read_db
 from ..orm import Call, Turn
 from ..orm import Ticket
 from ..privacy import mask_number
@@ -82,7 +82,7 @@ def list_calls(
     active: bool = Query(False, description="Additive: only calls that have not ended"),
     limit: int = Query(50, ge=1, le=1000),
     reveal: bool = Query(False, description="Not supported on lists: use GET /v1/calls/{id}?reveal=true"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """List calls, newest first (dashboard). Numbers are always masked here."""

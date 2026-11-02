@@ -9,7 +9,7 @@ from resolvix_contracts import ErrorBody, ErrorEnvelope, KBEntry
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit
-from ..deps import Principal, actor_of, get_db, get_principal
+from ..deps import Principal, actor_of, get_db, get_principal, get_read_db
 from ..kb.export import build_export
 from ..kb.importer import ImportRejected, parse_jsonl
 from ..kb.publish import PublishError, live_publish, mock_publish
@@ -49,7 +49,7 @@ def _stored(row: KBEntryDB) -> dict:
 @router.get("/kb/entries")
 def list_entries(
     status: Optional[Literal["draft", "approved", "archived"]] = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """{items: KBEntry[]} ordered by id. Every item validates as a KBEntry. The review flag is additive and
@@ -161,7 +161,7 @@ def import_entries(
 @router.get("/kb/export")
 def export_kb(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """KBExport: approved entries valid today (Asia/Kolkata), consumed by B's compiler."""
@@ -186,7 +186,13 @@ def publish_kb(
     actor = actor_of(principal)
     mode = "live" if settings.runtime_live else "mock"
     try:
-        info = live_publish(settings) if mode == "live" else mock_publish(db, clock)
+        if mode == "live":
+            # The runtime calls GET /v1/kb/export back while we wait. No database transaction may be open across this
+            # call (C-1): end whatever this session started, then talk to the runtime, then write in a new short one.
+            db.rollback()
+            info = live_publish(settings)
+        else:
+            info = mock_publish(db, clock)
     except PublishError as exc:
         write_audit(db, actor, "kb_publish_failed", "kb_publish", "-",
                     {"mode": mode, "status_code": exc.status_code, "code": exc.code, "message": exc.message,
@@ -205,7 +211,7 @@ def publish_kb(
 @router.get("/kb/publishes")
 def list_publishes(
     limit: int = Query(50, ge=1, le=500),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     principal: Principal = Depends(get_principal),
 ):
     """Additive (not in ops-api.yaml): publish history, newest first."""

@@ -113,9 +113,11 @@ def test_begin_immediate_is_in_effect_and_reads_still_work(client, auth, fixture
     engine = client.app.state.engine
     event.listen(engine, "before_cursor_execute", lambda conn, cur, stmt, *a: seen.append(stmt.strip().upper()))
     create(client, auth, fixture_json, "k")
+    writes = list(seen)
+    seen.clear()
     assert client.get("/v1/tickets", headers=auth).status_code == 200
-    assert any(s.startswith("BEGIN IMMEDIATE") for s in seen)
-    assert not any(s == "BEGIN" for s in seen)
+    assert any(s.startswith("BEGIN IMMEDIATE") for s in writes)          # the create takes the write lock at once
+    assert "BEGIN" in seen and not any(s.startswith("BEGIN IMMEDIATE") for s in seen)  # the list read does not (C-1)
     # the connection really is in manual-transaction mode and WAL
     with engine.connect() as conn:
         assert conn.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
